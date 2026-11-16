@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1418">
+<meta name="apple-mobile-web-app-title" content="我的工具">
+<title>我的工具</title>
+<style>
+:root{--bg:#0f1418;--panel:#182027;--line:#26313a;--fg:#e9eef2;--muted:#8a99a6;--accent:#2f80ed;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC","Noto Sans TC",system-ui,sans-serif;
+  padding:calc(24px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+main{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+h1{font-size:24px;margin:0 0 8px}
+a.tool{display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;color:var(--fg);text-decoration:none}
+a.tool:active{border-color:var(--accent)}
+a.tool b{font-size:20px}
+a.tool span{font-size:14px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>我的工具</h1>
+  <!-- 新工具加在這裡 -->
+  <a class="tool" href="voice-note/"><b>行車語音筆記</b><span>大麥克風鍵 + 大倒退鍵，說完分享到 Keep</span></a>
+</main>
+</body>
+</html>
