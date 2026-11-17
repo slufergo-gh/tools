@@ -100,7 +100,7 @@ body.pc .sheet{left:auto;top:0;width:360px;max-height:none;border-radius:0;borde
 .lesson .acts button{flex:1;min-width:120px;background:var(--accent);border:0;border-radius:10px;padding:10px;color:#fff;cursor:pointer;font-size:14px}
 .lesson .acts button.alt{background:#2a3640}
 /* 教學卡片 */
-#coach{position:absolute;left:10px;right:10px;top:10px;margin:0 auto;max-width:520px;background:rgba(20,27,33,.93);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+#coach{position:absolute;left:8px;right:8px;bottom:8px;margin:0 auto;max-width:520px;background:rgba(20,27,33,.93);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   border:1px solid var(--line);border-radius:14px;padding:12px 14px;z-index:5;font-size:15px;line-height:1.6;pointer-events:none;transition:opacity .25s}
 #coach button{pointer-events:auto}
 body.drawing #coach{opacity:.25}
@@ -109,7 +109,12 @@ body.drawing #coach button{pointer-events:none}
 #coach .top{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:4px}
 #coach .bar{height:5px;background:#2a3640;border-radius:3px;margin:8px 0 2px;overflow:hidden}
 #coach .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
-#coach .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+#coach .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+#coach{font-size:14px;padding:10px 12px;line-height:1.55}
+#coach.mini #coachText,#coach.mini .acts #coachQuit{display:none}
+#coach .tog{background:none!important;border:0;color:var(--muted);font-size:12px;padding:0 0 0 8px!important;cursor:pointer}
+body.pc #coach{left:auto;right:12px;top:12px;bottom:auto;width:320px}
+body:not(.pc):has(.sheet:not([hidden])) #coach{top:8px;bottom:auto}
 #coach .acts button{border:0;border-radius:10px;padding:8px 16px;cursor:pointer;font-size:14px;background:#2a3640;color:var(--fg)}
 #coach .acts button.next{background:var(--accent);color:#fff}
 #coach .acts button.next:disabled{opacity:.4}
@@ -129,13 +134,19 @@ body.drawing #coach button{pointer-events:none}
 .work button.load{background:var(--accent);color:#fff}
 .tplgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .tplgrid button{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:12px;padding:12px 4px;cursor:pointer;font-size:14px}
+#ask{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:24px}
+.askbox{background:#182027;border:1px solid var(--line);border-radius:16px;padding:20px;max-width:340px;width:100%}
+.askbox p{margin:0 0 16px;line-height:1.7;font-size:16px}
+.askbox .acts{display:flex;gap:10px;justify-content:flex-end}
+.askbox button{border:0;border-radius:10px;padding:10px 18px;font-size:15px;cursor:pointer;background:#2a3640;color:var(--fg)}
+.askbox button.danger{background:#d64545;color:#fff}
 </style>
 </head>
 <body>
 <div id="stage"><canvas id="c"></canvas><div id="hint" hidden></div>
   <div id="tiltUI" hidden><div class="arm"></div><div class="dot"></div></div>
   <div id="coach" hidden>
-    <div class="top"><span id="coachStep"></span><span id="coachName"></span></div>
+    <div class="top"><span id="coachStep"></span><span><span id="coachName"></span><button class="tog" id="coachTog">收合</button></span></div>
     <div id="coachText"></div>
     <div class="bar" id="coachBar"><i></i></div>
     <div class="acts"><button id="coachQuit">結束教學</button><button class="next" id="coachNext">下一步</button></div>
@@ -153,7 +164,6 @@ body.drawing #coach button{pointer-events:none}
     <button class="btn tool" data-tool="tilt" title="傾斜畫布 (T)：往一個方向拖，顏料就往那邊流"><svg viewBox="0 0 24 24"><path d="M3 17 21 9"/><path d="M15 6l6 3-3 6"/><path d="M5 21h14"/></svg><small>傾斜</small></button>
     <span class="spacer"></span>
     <button class="btn" id="bUndo" title="復原 (Ctrl+Z)" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><small>復原</small></button>
-    <button class="btn" id="bTpl" title="一鍵構圖"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><small>構圖</small></button>
     <button class="btn" id="bPal" title="配色"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5S14 15 15 15h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg><small>配色</small></button>
     <button class="btn" id="bSet" title="設定"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><small>設定</small></button>
     <button class="btn" id="bFile" title="暫存、讀檔、存圖"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg><small>檔案</small></button>
@@ -171,7 +181,7 @@ body.drawing #coach button{pointer-events:none}
   <div class="grid">
     <button id="fSave">暫存</button>
     <button id="fExport">存成圖片</button>
-    <button id="fHome">開始畫面</button>
+    <button id="fNew">另開新檔</button>
   </div>
   <h3>我的作品</h3>
   <p class="tip" style="margin-top:0">作品暫存在這台裝置的瀏覽器裡，換手機或清除瀏覽資料就會不見；想永久保留請「存成圖片」。</p>
@@ -228,6 +238,8 @@ body.drawing #coach button{pointer-events:none}
     </div>
   </div>
 </div>
+
+<div id="ask" hidden><div class="askbox"><p id="askText"></p><div class="acts"><button id="askNo">取消</button><button id="askYes" class="danger">刪除</button></div></div></div>
 
 <div id="fail" hidden></div>
 
@@ -339,7 +351,13 @@ const P = {
   // 顏料厚度造成的攤開（不經過不可壓縮投影），以及手機傾斜時往下流
   spread: program(`uniform sampler2D uVel, uDye; uniform float uS; uniform vec2 uTilt;
     void main(){ float L=texture(uDye,vL).a, R=texture(uDye,vR).a, T=texture(uDye,vT).a, B=texture(uDye,vB).a, h=texture(uDye,vUv).a;
-      vec2 v=texture(uVel,vUv).xy - vec2(R-L,T-B)*.5*uS*min(h,2.)*smoothstep(.5,1.,h) + uTilt*min(h,2.)*h;
+      // 顏料前緣外側的空白格子本身厚度是 0，若只看自己的厚度，速度會是 0，顏料就流不出去。
+      // 所以攤開看鄰近格子的最大厚度，傾斜看「上游」的厚度，讓前緣能往外推進。
+      vec2 tx=vec2(vR.x-vUv.x,vT.y-vUv.y);
+      float hn=max(h,max(max(L,R),max(T,B)));
+      float tl=length(uTilt); float hu=h;
+      if(tl>1e-3){ vec2 dir=uTilt/tl; hu=max(h,max(texture(uDye,vUv-dir*tx*1.5).a,texture(uDye,vUv-dir*tx*3.).a)); }
+      vec2 v=texture(uVel,vUv).xy - vec2(R-L,T-B)*.5*uS*min(hn,2.)*smoothstep(.5,1.,hn) + uTilt*min(hu,2.)*max(hu,.35);
       o=vec4(v,0.,1.); }`),
   // 吹得快、又在顏色交界的地方長出泡沫
   foam: program(`uniform sampler2D uAux, uVel, uDye; uniform float uRate, uDt;
@@ -503,6 +521,12 @@ function radial(x, y, r, s, t = flow){
 }
 
 /* ---------- 模擬 ---------- */
+function advectPaint(t, thin, dt){
+  const u = P.advect.use();
+  gl.uniform2f(u.texelSize, t.tx, t.ty); gl.uniform2f(u.uVelTx, vel.tx, vel.ty); gl.uniform1i(u.uVel, flow.read.bind(0));
+  gl.uniform1i(u.uDiv, divF.bind(2)); gl.uniform1f(u.uDiss, 0); gl.uniform1f(u.uDead, DEAD);
+  gl.uniform1f(u.uDt, dt); gl.uniform1i(u.uSrc, t.read.bind(1)); gl.uniform1f(u.uThin, thin); blit(t.write); t.swap();
+}
 const pointers = new Map();
 let tilt = [0, 0], tilt0 = null;
 let DEAD = 1.5, THIN = .6;
@@ -534,7 +558,7 @@ function step(dt){
   u = P.spread.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1i(u.uDye, dye.read.bind(1));
   const TX = tilt[0] + tiltUI[0], TY = tilt[1] + tiltUI[1];
   if(Math.hypot(TX, TY) > .15) stats.tilt += dt;
-  gl.uniform1f(u.uS, S.spread); gl.uniform2f(u.uTilt, TX * 45, TY * 45); blit(flow.write); flow.swap();
+  gl.uniform1f(u.uS, S.spread); gl.uniform2f(u.uTilt, TX * 32, TY * 32); blit(flow.write); flow.swap();
   for(const p of pointers.values()){
     if(p.tool === 'pour') radial(p.x, p.y, R * 1.3, 18);
     else if(p.tool === 'blow') radial(p.x, p.y, R * 1.2, 90 * S.blow * Math.max(0, 1 - p.speed * 80));
@@ -544,9 +568,7 @@ function step(dt){
   u = P.advect.use(); gl.uniform2f(u.uVelTx, vel.tx, vel.ty); gl.uniform1f(u.uDt, dt); gl.uniform1i(u.uDiv, divF.bind(2));
   gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1i(u.uSrc, vel.read.bind(0));
   gl.uniform1f(u.uDiss, S.viscosity); gl.uniform1f(u.uThin, 0); gl.uniform1f(u.uDead, 0); blit(vel.write); vel.swap();
-  gl.uniform2f(u.texelSize, dye.tx, dye.ty); gl.uniform1i(u.uVel, flow.read.bind(0)); gl.uniform1f(u.uDiss, 0); gl.uniform1f(u.uDead, DEAD);
-  gl.uniform1i(u.uSrc, dye.read.bind(1)); gl.uniform1f(u.uThin, THIN); blit(dye.write); dye.swap();
-  gl.uniform1i(u.uSrc, aux.read.bind(1)); gl.uniform1f(u.uThin, 0); blit(aux.write); aux.swap();
+  advectPaint(dye, THIN, dt); advectPaint(aux, 0, dt);
   u = P.foam.use(); gl.uniform2f(u.texelSize, dye.tx * 2, dye.ty * 2); gl.uniform1i(u.uAux, aux.read.bind(0));
   gl.uniform1i(u.uVel, flow.read.bind(1)); gl.uniform1i(u.uDye, dye.read.bind(2)); gl.uniform1f(u.uRate, 2.5); gl.uniform1f(u.uDt, dt);
   blit(aux.write); aux.swap();
@@ -710,7 +732,6 @@ function renderPalSheet(){
 }
 function openSheet(id){ $$('.sheet').forEach(s => s.hidden = s.id !== id); if(id === 'palSheet') renderPalSheet(); if(id === 'tplSheet') renderTplSheet(); if(id === 'fileSheet') renderWorks(); }
 $$('[data-close]').forEach(b => b.onclick = () => b.closest('.sheet').hidden = true);
-$('#bTpl').onclick = () => { fromStart = false; openSheet('tplSheet'); };
 $('#bFile').onclick = () => openSheet('fileSheet');
 $('#bPal').onclick = () => openSheet('palSheet');
 $('#bSet').onclick = () => openSheet('setSheet');
@@ -917,19 +938,45 @@ async function renderWorks(){
       if(dirty || hist.length) await autosave(true);
       if(await loadWork(r.id)){ $('#fileSheet').hidden = true; closeStart(); showHint('已讀取作品，可以繼續畫'); }
     };
-    row.querySelector('.del').onclick = async () => {
-      if(!confirm('確定刪除這個暫存的作品？')) return;
-      await DB.del(r.id); if(state.workId === r.id) state.workId = null; renderWorks();
-    };
+    row.querySelector('.del').onclick = () => deleteWork(r);
     box.appendChild(row);
   });
+}
+function ask(text, yes = '刪除'){
+  return new Promise(res => {
+    $('#askText').textContent = text; $('#askYes').textContent = yes; $('#ask').hidden = false;
+    const done = v => { $('#ask').hidden = true; res(v); };
+    $('#askYes').onclick = () => done(true); $('#askNo').onclick = () => done(false);
+  });
+}
+async function deleteWork(r){
+  let auto = null; try{ auto = await DB.get('auto'); }catch(e){}
+  // 「上次畫的」＝自動暫存，或自動暫存指向的作品，或目前畫布上的作品
+  const isLast = r.id === 'auto' || r.id === state.workId || (auto && auto.workId === r.id);
+  const msg = isLast ? '確定刪除「上次畫的作品」嗎？刪除後無法復原，畫布會清空，開始畫面也不會再出現「繼續上次的作品」。' : '確定刪除這個作品嗎？刪除後無法復原。';
+  if(!await ask(msg)) return;
+  await DB.del(r.id);
+  if(isLast){
+    if(r.id !== 'auto') await DB.del('auto');
+    newWork(); clearCanvas(); dirty = false; endLesson();
+    showHint('已刪除');
+  }
+  renderWorks();
 }
 $('#fSave').onclick = async () => {
   if(!state.workId) state.workId = 'w' + Date.now();
   try{ await saveWork(state.workId); await saveWork('auto'); dirty = false; showHint('已暫存，之後可以在「檔案」裡讀取'); renderWorks(); }
   catch(e){ showHint('暫存失敗：' + (e.message || e)); }
 };
-$('#fHome').onclick = async () => { $('#fileSheet').hidden = true; endLesson(); await autosave(true); openStart(); };
+$('#fNew').onclick = async () => {
+  if(dirty || hist.length){
+    if(!await ask('要另開新檔嗎？目前的作品會先暫存到「我的作品」，之後可以讀取回來。', '另開新檔')) return;
+    if(!state.workId) state.workId = 'w' + Date.now();
+    try{ await saveWork(state.workId); await saveWork('auto'); }catch(e){ showHint('暫存失敗：' + (e.message || e)); return; }
+    dirty = false;
+  }
+  $('#fileSheet').hidden = true; endLesson(); openStart();
+};
 
 /* ---------- 開始畫面 ---------- */
 async function openStart(){
@@ -966,7 +1013,7 @@ const S_PAL = {text:'先挑一組配色。下方會打開配色面板，點一�
 const LESSONS = [
   {name:'海浪', desc:'倒出深淺不同的海，再用吹風把白色吹成浪花蕾絲。', tpl:'0-0', skip:5, steps:[
     S_PAL,
-    {text:'先倒最深的海。已經幫你選好最深的顏色，在畫面<b>最上方</b>按住，左右慢慢拖，像畫一條粗線。', goal:['pour', 2.5],
+    {text:'先倒最深的海。已經幫你選好最深的顏色，在畫面<b>最上方</b>按住，左右慢慢拖，像畫一條粗線。說明卡片擋到時可以按「收合」。', goal:['pour', 2.5],
       before:() => { $('#palSheet').hidden = true; const p = paintIdx(); useColor(p[0]); sizeTo(.09); }, hl:'.tool[data-tool=pour]'},
     {text:'接著倒中間的藍，緊貼在剛剛那條<b>下面</b>，一樣左右拖。', goal:['pour', 2.5], before:() => { const p = paintIdx(); useColor(p[Math.floor(p.length / 2)]); }},
     {text:'再倒淺色，越往下越淺，這裡會靠近海灘。', goal:['pour', 2], before:() => { const p = paintIdx(); useColor(p[p.length - 1]); }},
@@ -1049,6 +1096,7 @@ function endLesson(){
   $$('.pulse').forEach(e => e.classList.remove('pulse'));
 }
 $('#coachNext').onclick = () => { if(lesson) gotoStep(lesson.i + 1); };
+$('#coachTog').onclick = () => { const m = $('#coach').classList.toggle('mini'); $('#coachTog').textContent = m ? '展開' : '收合'; };
 $('#coachQuit').onclick = () => { endLesson(); showHint('已結束教學，可以自由繼續畫'); };
 
 /* ---------- 開始 ---------- */
