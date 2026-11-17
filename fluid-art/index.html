@@ -23,7 +23,7 @@ body{background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC
 .sw.on{outline:3px solid #fff;outline-offset:2px}
 .sw.rot{background:conic-gradient(#f55,#fc5,#5c7,#4af,#a6f,#f55)}
 button{font:inherit;color:inherit}
-.btn{background:transparent;border:0;border-radius:12px;min-width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;padding:0 6px;color:var(--fg)}
+.btn{background:transparent;border:0;border-radius:12px;min-width:40px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;padding:0 4px;color:var(--fg)}
 .btn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .btn small{font-size:10px;color:var(--muted)}
 .btn:active{background:rgba(255,255,255,.08)}
@@ -73,39 +73,109 @@ body.pc .sheet{left:auto;top:0;width:360px;max-height:none;border-radius:0;borde
   max-width:calc(100% - 32px);text-align:center;pointer-events:none;transition:opacity .6s}
 #fail[hidden]{display:none}
 #fail{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;background:var(--bg);z-index:20;line-height:1.7}
+[hidden]{display:none!important}
+.row.tools{gap:4px}
+.sheet{z-index:30}
+.pulse{animation:pulse 1.3s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(74,163,255,.8)}50%{box-shadow:0 0 0 9px rgba(74,163,255,0)}}
+/* 開始畫面 */
+#start{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:24px 16px calc(24px + env(safe-area-inset-bottom));
+  background:linear-gradient(rgba(8,12,16,.35),rgba(8,12,16,.8));overflow-y:auto}
+#start[hidden]{display:none}
+.startbox{width:100%;max-width:420px;display:flex;flex-direction:column;gap:12px}
+.startbox h1{font-size:40px;margin:0;letter-spacing:4px;text-shadow:0 2px 16px rgba(0,0,0,.6)}
+.startbox>p{margin:0 0 12px;color:#cfd8df;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+.startbox h2{font-size:20px;margin:4px 0}
+.big{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(20,27,33,.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:16px;padding:16px;cursor:pointer;font-size:18px;font-weight:600}
+.big small{display:block;font-size:13px;font-weight:400;color:var(--muted);margin-top:4px}
+.big img{width:52px;height:52px;border-radius:10px;object-fit:cover;flex:none}
+.big:active{border-color:var(--accent)}
+.big.primary{border-color:var(--accent)}
+.link{background:none;border:0;color:#cfd8df;font-size:15px;padding:10px;cursor:pointer;text-decoration:underline}
+.lesson{background:rgba(20,27,33,.9);border:1px solid var(--line);border-radius:16px;padding:14px}
+.lesson b{font-size:17px}
+.lesson p{margin:6px 0 10px;font-size:13px;color:var(--muted);line-height:1.6}
+.lesson .acts{display:flex;gap:8px;flex-wrap:wrap}
+.lesson .acts button{flex:1;min-width:120px;background:var(--accent);border:0;border-radius:10px;padding:10px;color:#fff;cursor:pointer;font-size:14px}
+.lesson .acts button.alt{background:#2a3640}
+/* 教學卡片 */
+#coach{position:absolute;left:10px;right:10px;top:10px;margin:0 auto;max-width:520px;background:rgba(20,27,33,.93);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid var(--line);border-radius:14px;padding:12px 14px;z-index:5;font-size:15px;line-height:1.6;pointer-events:none;transition:opacity .25s}
+#coach button{pointer-events:auto}
+body.drawing #coach{opacity:.25}
+body.drawing #coach button{pointer-events:none}
+#coach[hidden]{display:none}
+#coach .top{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:4px}
+#coach .bar{height:5px;background:#2a3640;border-radius:3px;margin:8px 0 2px;overflow:hidden}
+#coach .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+#coach .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+#coach .acts button{border:0;border-radius:10px;padding:8px 16px;cursor:pointer;font-size:14px;background:#2a3640;color:var(--fg)}
+#coach .acts button.next{background:var(--accent);color:#fff}
+#coach .acts button.next:disabled{opacity:.4}
+#coach .good{color:#7ee2a8}
+/* 傾斜箭頭 */
+#tiltUI{position:absolute;pointer-events:none;z-index:4}
+#tiltUI[hidden]{display:none}
+#tiltUI .dot{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)}
+#tiltUI .arm{position:absolute;left:0;top:-2px;height:4px;background:#fff;border-radius:2px;transform-origin:0 50%;box-shadow:0 0 6px rgba(0,0,0,.5)}
+#tiltUI .arm::after{content:"";position:absolute;right:-10px;top:-6px;border-left:12px solid #fff;border-top:8px solid transparent;border-bottom:8px solid transparent}
+/* 作品列表 */
+.work{display:flex;gap:12px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
+.work img{width:64px;height:64px;object-fit:cover;border-radius:8px;background:#000;flex:none}
+.work .meta{flex:1;font-size:14px;line-height:1.5}
+.work .meta small{color:var(--muted)}
+.work button{background:#2a3640;border:0;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:13px}
+.work button.load{background:var(--accent);color:#fff}
+.tplgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tplgrid button{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:12px;padding:12px 4px;cursor:pointer;font-size:14px}
 </style>
 </head>
 <body>
-<div id="stage"><canvas id="c"></canvas><div id="hint" hidden></div></div>
+<div id="stage"><canvas id="c"></canvas><div id="hint" hidden></div>
+  <div id="tiltUI" hidden><div class="arm"></div><div class="dot"></div></div>
+  <div id="coach" hidden>
+    <div class="top"><span id="coachStep"></span><span id="coachName"></span></div>
+    <div id="coachText"></div>
+    <div class="bar" id="coachBar"><i></i></div>
+    <div class="acts"><button id="coachQuit">結束教學</button><button class="next" id="coachNext">下一步</button></div>
+  </div>
+</div>
 
 <div id="bar">
   <div class="row">
     <div id="sw"></div>
     <div class="sizewrap"><span>筆刷</span><input id="size" type="range" min="0.02" max="0.25" step="0.005" value="0.07" aria-label="筆刷大小"></div>
   </div>
-  <div class="row">
+  <div class="row tools">
     <button class="btn tool on" data-tool="pour" title="倒顏料 (P)"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z"/></svg><small>倒</small></button>
     <button class="btn tool" data-tool="blow" title="吹風 (B，滑鼠右鍵也是吹風)"><svg viewBox="0 0 24 24"><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/></svg><small>吹</small></button>
+    <button class="btn tool" data-tool="tilt" title="傾斜畫布 (T)：往一個方向拖，顏料就往那邊流"><svg viewBox="0 0 24 24"><path d="M3 17 21 9"/><path d="M15 6l6 3-3 6"/><path d="M5 21h14"/></svg><small>傾斜</small></button>
     <span class="spacer"></span>
     <button class="btn" id="bUndo" title="復原 (Ctrl+Z)" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><small>復原</small></button>
     <button class="btn" id="bTpl" title="一鍵構圖"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><small>構圖</small></button>
     <button class="btn" id="bPal" title="配色"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5S14 15 15 15h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg><small>配色</small></button>
     <button class="btn" id="bSet" title="設定"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><small>設定</small></button>
-    <button class="btn" id="bSave" title="存圖"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><small>存圖</small></button>
+    <button class="btn" id="bFile" title="暫存、讀檔、存圖"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg><small>檔案</small></button>
   </div>
 </div>
 
 <div class="sheet" id="tplSheet" hidden>
-  <header><b>一鍵構圖</b><button class="done" data-close>完成</button></header>
-  <p class="tip">選一個起手式，畫布會用目前配色先倒好顏料，接著用「吹」把它吹開。</p>
+  <header><b>選擇構圖</b><button class="done" data-close>關閉</button></header>
+  <p class="tip">選一個起手式，畫布會用目前的配色先倒好顏料，再用「吹」和「傾斜」把它變成你的作品。想換顏色可以先到「配色」。</p>
+  <div id="tplGroups"></div>
+</div>
+
+<div class="sheet" id="fileSheet" hidden>
+  <header><b>檔案</b><button class="done" data-close>完成</button></header>
   <div class="grid">
-    <button data-tpl="wave">海浪</button>
-    <button data-tpl="ring">同心圓</button>
-    <button data-tpl="splash">隨機潑灑</button>
-    <button data-tpl="stripe">條紋大理石</button>
-    <button data-tpl="cells">細胞</button>
-    <button data-tpl="clear">空白畫布</button>
+    <button id="fSave">暫存</button>
+    <button id="fExport">存成圖片</button>
+    <button id="fHome">開始畫面</button>
   </div>
+  <h3>我的作品</h3>
+  <p class="tip" style="margin-top:0">作品暫存在這台裝置的瀏覽器裡，換手機或清除瀏覽資料就會不見；想永久保留請「存成圖片」。</p>
+  <div id="works"></div>
 </div>
 
 <div class="sheet" id="palSheet" hidden>
@@ -136,8 +206,27 @@ body.pc .sheet{left:auto;top:0;width:360px;max-height:none;border-radius:0;borde
   <div class="set"><label>畫質</label><select data-k="quality"><option value="low">省電</option><option value="std">標準</option><option value="high">高畫質</option></select></div>
   <div class="set"><label>介面</label><select data-k="layout"><option value="auto">自動</option><option value="phone">手機</option><option value="pc">電腦</option></select></div>
   <div class="set"><label>傾斜手機</label><select data-k="tilt"><option value="off">關閉</option><option value="on">開啟（傾斜讓顏料流動）</option></select></div>
-  <p class="tip">電腦操作：左鍵用目前工具、右鍵吹風、滾輪調筆刷大小、P 倒、B 吹、Ctrl+Z 復原。<br>畫面卡頓時把畫質調成「省電」。</p>
+  <p class="tip">電腦操作：左鍵用目前工具、右鍵吹風、滾輪調筆刷大小、P 倒、B 吹、T 傾斜、Ctrl+Z 復原。<br>畫面卡頓時把畫質調成「省電」。</p>
   <div class="set"><button class="done" id="resetSet" style="background:#333">恢復預設</button></div>
+</div>
+
+<div id="start" hidden>
+  <div class="startbox">
+    <h1>流動畫</h1>
+    <p>倒顏料、吹風、傾斜畫布，做出屬於你的流體畫</p>
+    <div id="startMain" style="display:flex;flex-direction:column;gap:12px">
+      <button class="big primary" id="sContinue" hidden><img alt=""><span>繼續上次的作品<small></small></span></button>
+      <button class="big" data-start="tpl"><span>從構圖開始<small>海浪、同心圓、大理石…選一個起手式再自由發揮</small></span></button>
+      <button class="big" data-start="blank"><span>空白畫布<small>從零開始，自己倒、自己吹</small></span></button>
+      <button class="big" data-start="lesson"><span>教學課程<small>像上體驗課一樣，跟著步驟做出自己的第一幅</small></span></button>
+      <button class="link" data-start="works">我的作品</button>
+    </div>
+    <div id="startLessons" hidden style="display:flex;flex-direction:column;gap:12px">
+      <h2>教學課程</h2>
+      <div id="lessonList" style="display:flex;flex-direction:column;gap:10px"></div>
+      <button class="link" data-start="back">返回</button>
+    </div>
+  </div>
 </div>
 
 <div id="fail" hidden></div>
@@ -259,14 +348,23 @@ const P = {
       float edge=smoothstep(.05,.35,length(col(vR)-col(vL))+length(col(vT)-col(vB)));
       x.g=min(1.,x.g+uRate*uDt*smoothstep(15.,120.,s)*smoothstep(.05,.3,a)*edge); o=x; }`),
   paint: program(NOISE + `uniform sampler2D uT; uniform int uMode, uShape; uniform vec2 uPoint, uBand; uniform vec3 uColor;
-    uniform float uR, uAspect, uAdd, uSeed, uCell, uFoam;
+    uniform float uR, uAspect, uAdd, uSeed, uCell, uFoam, uAngle, uCurve;
     void main(){ vec4 b=texture(uT,vUv); float m;
       if(uShape==0){ vec2 p=vUv-uPoint; p.x*=uAspect; float wob=(vnoise(p/uR*2.+uSeed)-.5)*.25*uR; m=1.-smoothstep(uR*.8,uR,length(p)+wob); }
-      else { float x=vUv.x*uAspect; float y=vUv.y+(vnoise(vec2(x*3.+uSeed,uSeed))-.5)*.05+sin(x*5.+uSeed)*.012;
+      else { vec2 q=vec2((vUv.x-.5)*uAspect,vUv.y-.5); float cs=cos(uAngle), sn=sin(uAngle);
+        float x=cs*q.x+sn*q.y; float y=-sn*q.x+cs*q.y+.5+uCurve*x*x;
+        y+=(vnoise(vec2(x*3.+uSeed,uSeed))-.5)*.05+sin(x*5.+uSeed)*.012;
         m=smoothstep(uBand.x-.006,uBand.x+.006,y)*(1.-smoothstep(uBand.y-.006,uBand.y+.006,y)); }
       if(m<=0.){ o=b; return; }
       if(uMode==0){ float a=b.a; vec3 c=a>.02? b.rgb/a : uColor; c=mix(c,uColor,uFoam>.5 && a>.02 ? m*.45 : m); float na=min(a+m*uAdd,4.); o=vec4(c*na,na); }
       else { float v=voro(vec2(vUv.x*uAspect,vUv.y)*uCell+uSeed*7.); o=vec4(mix(b.r,v,m),mix(b.g,uFoam,m),0.,1.); } }`),
+  pack: program(`uniform sampler2D uDye, uAux; uniform int uMode;
+    void main(){ vec4 d=texture(uDye,vUv);
+      if(uMode==0) o=vec4(d.a>1e-3? clamp(d.rgb/d.a,0.,1.):vec3(0),1.);
+      else { vec4 x=texture(uAux,vUv); o=vec4(clamp(d.a*.25,0.,1.),clamp(x.r,0.,1.),clamp(x.g,0.,1.),1.); } }`),
+  unpack: program(`uniform sampler2D uC, uD; uniform int uMode;
+    void main(){ vec3 c=texture(uC,vUv).rgb, m=texture(uD,vUv).rgb;
+      if(uMode==0){ float a=m.r*4.; o=vec4(c*a,a); } else o=vec4(m.g,m.b,0.,1.); }`),
   display: program(`uniform sampler2D uDye, uAux; uniform vec3 uCanvas, uLace; uniform vec2 uTx;
     uniform float uFoam, uCells, uRelief, uGloss;
     float H(vec2 uv){ return min(texture(uDye,uv).a,3.)*.4; }
@@ -379,7 +477,7 @@ const hex2rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 25
 const lum = c => { const [r, g, b] = hex2rgb(c); return .3 * r + .59 * g + .11 * b; };
 function paint(o){
   // o: {shape:0圓/1帶, x,y,r | y0,y1, color, add, seed, cell}
-  const rgb = hex2rgb(o.color), foam = lum(o.color) > .85 ? 1 : 0;
+  const rgb = hex2rgb(o.color), foam = o.foam != null ? o.foam : lum(o.color) > .85 ? 1 : 0;
   for(const [t, mode] of [[dye, 0], [aux, 1]]){
     const u = P.paint.use();
     gl.uniform2f(u.texelSize, t.tx, t.ty); gl.uniform1i(u.uT, t.read.bind(0));
@@ -387,6 +485,7 @@ function paint(o){
     gl.uniform2f(u.uPoint, o.x || 0, o.y || 0); gl.uniform2f(u.uBand, o.y0 || 0, o.y1 || 0);
     gl.uniform3fv(u.uColor, rgb); gl.uniform1f(u.uR, o.r || .1); gl.uniform1f(u.uAspect, aspect);
     gl.uniform1f(u.uAdd, o.add); gl.uniform1f(u.uSeed, o.seed); gl.uniform1f(u.uCell, o.cell); gl.uniform1f(u.uFoam, foam);
+    gl.uniform1f(u.uAngle, o.angle || 0); gl.uniform1f(u.uCurve, o.curve || 0);
     blit(t.write); t.swap();
   }
 }
@@ -407,13 +506,17 @@ function radial(x, y, r, s, t = flow){
 const pointers = new Map();
 let tilt = [0, 0], tilt0 = null;
 let DEAD = 1.5, THIN = .6;
+let tiltUI = [0, 0];
+const stats = {pour:0, blow:0, tilt:0};
 function step(dt){
   gl.disable(gl.BLEND);
   const R = state.size;
   // 吹風：沿著拖曳方向的力（會產生漩渦）
   for(const p of pointers.values()){
     p.speed = Math.max(p.speed * .85, Math.hypot(p.dx, p.dy));
-    if(!(p.dx || p.dy)) continue;
+    if(p.tool === 'pour') stats.pour += dt;
+    else if(p.tool === 'blow') stats.blow += Math.hypot(p.dx, p.dy) + dt * .15;
+    if(p.tool === 'tilt' || !(p.dx || p.dy)) continue;
     const g = p.tool === 'blow' ? 2.2 * S.blow : 0.6;
     splatVel(p.x, p.y, p.dx * vel.w * g, p.dy * vel.h * g, R * (p.tool === 'blow' ? 1.4 : 0.8));
   }
@@ -429,10 +532,12 @@ function step(dt){
   // 只在局部作用、不進入不可壓縮場的流動（顏料攤開、倒顏料往外推、吹風往外推、傾斜）。
   // 這些放在另一張 flow 貼圖，每幀重新計算，只拿來搬顏料，所以不會牽動遠處的顏料。
   u = P.spread.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1i(u.uDye, dye.read.bind(1));
-  gl.uniform1f(u.uS, S.spread); gl.uniform2f(u.uTilt, tilt[0] * 60, tilt[1] * 60); blit(flow.write); flow.swap();
+  const TX = tilt[0] + tiltUI[0], TY = tilt[1] + tiltUI[1];
+  if(Math.hypot(TX, TY) > .15) stats.tilt += dt;
+  gl.uniform1f(u.uS, S.spread); gl.uniform2f(u.uTilt, TX * 45, TY * 45); blit(flow.write); flow.swap();
   for(const p of pointers.values()){
     if(p.tool === 'pour') radial(p.x, p.y, R * 1.3, 18);
-    else radial(p.x, p.y, R * 1.2, 90 * S.blow * Math.max(0, 1 - p.speed * 80));
+    else if(p.tool === 'blow') radial(p.x, p.y, R * 1.2, 90 * S.blow * Math.max(0, 1 - p.speed * 80));
   }
   u = P.div.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, flow.read.bind(0)); blit(divF);
   // 平流
@@ -465,49 +570,100 @@ function render(){
 let lastT = 0;
 function frame(t){
   const dt = Math.min(Math.max((t - lastT) / 1000, 1/240), 1/30); lastT = t;
-  resize(); step(dt); render();
+  resize(); step(dt); render(); coachTick();
   requestAnimationFrame(frame);
 }
 
 /* ---------- 構圖模板 ---------- */
 const rnd = (a, b) => a + Math.random() * (b - a);
 const sortedByLum = () => [...pal.colors].sort((a, b) => lum(a) - lum(b));
-const TEMPLATES = {
-  clear(){},
-  wave(){
-    const cols = sortedByLum().filter(c => lum(c) < .85);
-    const top = 1.02, bottom = .42, n = Math.max(cols.length, 1), hgt = (top - bottom) / n;
-    cols.forEach((c, i) => paint({shape:1, y0:top - (i + 1) * hgt - .01, y1:top - i * hgt + .05, color:c, add:1.1, seed:rnd(0, 99), cell:rnd(35, 70)}));
-    const light = cols[cols.length - 1] || pal.lace;
-    paint({shape:1, y0:bottom - .1, y1:bottom + .04, color:light, add:.9, seed:rnd(0, 99), cell:rnd(45, 80)});
-    paint({shape:1, y0:bottom - .1, y1:bottom + .01, color:pal.lace, add:.5, seed:rnd(0, 99), cell:rnd(45, 80)});
-    return '用「吹」從白色那排往上吹，就會出現浪花';
-  },
-  ring(){
-    let i = 0;
-    for(let r = .42; r > .02; r -= .035) paint({x:.5, y:.5, r, color:pal.colors[i++ % pal.colors.length], add:.35, seed:rnd(0, 99), cell:rnd(30, 70)});
-    return '等它自己攤開，或用「吹」從中間往外吹';
-  },
-  splash(){
-    for(let i = 0; i < 34; i++) paint({x:rnd(.05, .95), y:rnd(.05, .95), r:rnd(.04, .16), color:pal.colors[i % pal.colors.length], add:rnd(.6, 1.4), seed:rnd(0, 99), cell:rnd(30, 80)});
-    return '用「吹」拖曳，把顏色拉開混在一起';
-  },
-  stripe(){
-    const n = 14;
-    for(let i = 0; i < n; i++) paint({shape:1, y0:i / n - .01, y1:(i + 1) / n + .05, color:pal.colors[i % pal.colors.length], add:1, seed:rnd(0, 99), cell:rnd(40, 80)});
-    return '用「吹」橫向拖過去，會拉出大理石紋';
-  },
-  cells(){
-    const cols = sortedByLum();
-    paint({shape:1, y0:-.1, y1:1.1, color:cols[0], add:1, seed:rnd(0, 99), cell:30});
-    for(let i = 0; i < 60; i++) paint({x:rnd(0, 1), y:rnd(0, 1), r:rnd(.03, .09), color:cols[1 + i % Math.max(cols.length - 1, 1)] || cols[0], add:rnd(.3, .9), seed:rnd(0, 99), cell:rnd(50, 110)});
-    return '輕輕吹一下，細胞就會被拉開';
-  },
-};
-function applyTemplate(name){
+const bandRange = angle => { const e = .5 * (Math.abs(Math.cos(angle)) + Math.abs(Math.sin(angle)) * aspect); return [.5 - e, .5 + e]; };
+function waveT({angle = 0, curve = 0, double = false, shore = .42} = {}){
+  const cols = sortedByLum().filter(c => lum(c) < .85);
+  const [lo, hi] = bandRange(angle), Y = f => lo + f * (hi - lo);
+  const top = Y(1) + .03 + Math.abs(curve) * .3, bottom = Y(shore), n = Math.max(cols.length, 1), hgt = (top - bottom) / n;
+  const P2 = o => paint(Object.assign({shape:1, angle, curve, seed:rnd(0, 99), cell:rnd(35, 75)}, o));
+  cols.forEach((c, i) => P2({y0:top - (i + 1) * hgt - .01, y1:top - i * hgt + .05, color:c, add:1.1}));
+  const light = cols[cols.length - 1] || pal.lace;
+  P2({y0:bottom - .1, y1:bottom + .04, color:light, add:.9});
+  P2({y0:bottom - .1, y1:bottom + .01, color:pal.lace, add:.5});
+  if(double){ const m = bottom + (top - bottom) * .38; P2({y0:m - .02, y1:m + .015, color:pal.lace, add:.6}); }
+  return '用「吹」從白色那排往海的方向吹，就會出現浪花';
+}
+function ringAt(x, y, rMax, step, add){
+  let i = Math.floor(rnd(0, pal.colors.length));
+  for(let r = rMax; r > .015; r -= step) paint({x, y, r, color:pal.colors[i++ % pal.colors.length], add, seed:rnd(0, 99), cell:rnd(30, 70)});
+}
+function stripeT({n = 14, angle = 0, curve = 0} = {}){
+  const [lo, hi] = bandRange(angle), span = hi - lo + Math.abs(curve) * .5, start = lo - Math.abs(curve) * .25;
+  for(let i = 0; i < n; i++) paint({shape:1, angle, curve, y0:start + i / n * span - .01, y1:start + (i + 1) / n * span + .03,
+    color:pal.colors[i % pal.colors.length], add:1, seed:rnd(0, 99), cell:rnd(40, 80)});
+  return '用「吹」橫向拖過去，會拉出大理石紋';
+}
+function splashT(n, r0, r1){
+  for(let i = 0; i < n; i++) paint({x:rnd(.03, .97), y:rnd(.03, .97), r:rnd(r0, r1), color:pal.colors[i % pal.colors.length], add:rnd(.6, 1.4), seed:rnd(0, 99), cell:rnd(30, 80)});
+  return '用「吹」拖曳，把顏色拉開混在一起';
+}
+function cellsT(n, r0, r1, c0, c1, base){
+  const cols = sortedByLum();
+  paint({shape:1, y0:-1, y1:2, color:base || cols[0], add:1, seed:rnd(0, 99), cell:30});
+  for(let i = 0; i < n; i++) paint({x:rnd(0, 1), y:rnd(0, 1), r:rnd(r0, r1), color:cols[1 + i % Math.max(cols.length - 1, 1)] || cols[0], add:rnd(.3, .9), seed:rnd(0, 99), cell:rnd(c0, c1)});
+  return '輕輕吹一下或傾斜畫布，細胞就會被拉開';
+}
+const TEMPLATE_GROUPS = [
+  {name:'海浪', items:[
+    ['平行浪', () => waveT()],
+    ['斜角浪', () => waveT({angle:.42})],
+    ['海灣', () => waveT({curve:1.1, shore:.36})],
+    ['雙層浪', () => waveT({double:true, shore:.32})],
+    ['側面浪', () => waveT({angle:Math.PI / 2, shore:.45})],
+    ['遠方海平線', () => waveT({shore:.62})],
+  ]},
+  {name:'同心圓', items:[
+    ['置中', () => { ringAt(.5, .5, .42, .035, .35); return '等它自己攤開，或用「傾斜」讓圓流成花瓣'; }],
+    ['滿版大圓', () => { ringAt(.5, .5, .75, .05, .3); return '用「吹」從中心往外吹出放射紋'; }],
+    ['偏心三圓', () => { ringAt(.3, .68, .22, .03, .35); ringAt(.7, .55, .2, .03, .35); ringAt(.45, .28, .24, .03, .35); return '傾斜畫布，讓三個圓流在一起'; }],
+    ['花朵', () => { for(let k = 0; k < 6; k++){ const t = k / 6 * Math.PI * 2; ringAt(.5 + Math.cos(t) * .22 / aspect, .5 + Math.sin(t) * .22, .11, .025, .35); } ringAt(.5, .5, .1, .025, .4); return '用「吹」從中心往每片花瓣吹'; }],
+  ]},
+  {name:'潑灑', items:[
+    ['隨機', () => splashT(34, .04, .16)],
+    ['密集小點', () => splashT(130, .02, .06)],
+    ['大色塊', () => splashT(12, .15, .3)],
+  ]},
+  {name:'大理石', items:[
+    ['橫條', () => stripeT()],
+    ['斜條', () => stripeT({angle:.7})],
+    ['彎曲條', () => stripeT({curve:1.8})],
+    ['細紋', () => stripeT({n:28})],
+  ]},
+  {name:'細胞', items:[
+    ['密集', () => cellsT(60, .03, .09, 50, 110)],
+    ['大細胞', () => cellsT(30, .06, .14, 22, 45)],
+    ['星空', () => { const cols = sortedByLum(); cellsT(25, .05, .14, 40, 90, cols[0]);
+      for(let i = 0; i < 70; i++) paint({x:rnd(0, 1), y:rnd(0, 1), r:rnd(.006, .018), color:pal.lace, add:.6, seed:rnd(0, 99), cell:90, foam:0});
+      return '輕輕傾斜，讓星雲慢慢流動'; }],
+  ]},
+];
+const TEMPLATES = {};
+TEMPLATE_GROUPS.forEach((g, gi) => g.items.forEach(([name, fn], ii) => TEMPLATES[gi + '-' + ii] = fn));
+function applyTemplate(id){
   snapshot(); clearCanvas();
-  const msg = TEMPLATES[name]();
+  const msg = TEMPLATES[id] && TEMPLATES[id]();
+  dirty = true;
   if(msg){ setTool('blow'); showHint(msg); }
+}
+function renderTplSheet(){
+  const g = $('#tplGroups'); g.innerHTML = '';
+  TEMPLATE_GROUPS.forEach((grp, gi) => {
+    const h = document.createElement('h3'); h.textContent = grp.name; g.appendChild(h);
+    const grid = document.createElement('div'); grid.className = 'tplgrid';
+    grp.items.forEach(([name], ii) => {
+      const b = document.createElement('button'); b.textContent = name;
+      b.onclick = () => { $('#tplSheet').hidden = true; if(fromStart){ newWork(); closeStart(); } applyTemplate(gi + '-' + ii); };
+      grid.appendChild(b);
+    });
+    g.appendChild(grid);
+  });
 }
 
 /* ---------- 介面 ---------- */
@@ -552,13 +708,13 @@ function renderPalSheet(){
     tl.appendChild(b);
   });
 }
-function openSheet(id){ $$('.sheet').forEach(s => s.hidden = s.id !== id); if(id === 'palSheet') renderPalSheet(); }
+function openSheet(id){ $$('.sheet').forEach(s => s.hidden = s.id !== id); if(id === 'palSheet') renderPalSheet(); if(id === 'tplSheet') renderTplSheet(); if(id === 'fileSheet') renderWorks(); }
 $$('[data-close]').forEach(b => b.onclick = () => b.closest('.sheet').hidden = true);
-$('#bTpl').onclick = () => openSheet('tplSheet');
+$('#bTpl').onclick = () => { fromStart = false; openSheet('tplSheet'); };
+$('#bFile').onclick = () => openSheet('fileSheet');
 $('#bPal').onclick = () => openSheet('palSheet');
 $('#bSet').onclick = () => openSheet('setSheet');
-$('#bUndo').onclick = undo;
-$$('[data-tpl]').forEach(b => b.onclick = () => { applyTemplate(b.dataset.tpl); $('#tplSheet').hidden = true; });
+$('#bUndo').onclick = () => { undo(); dirty = true; };
 $$('.tool').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 const sizeEl = $('#size'); sizeEl.value = state.size;
 sizeEl.oninput = () => { state.size = +sizeEl.value; store.set('size', state.size); };
@@ -600,7 +756,7 @@ async function setTilt(on){
 }
 
 // 存圖
-$('#bSave').onclick = () => {
+$('#fExport').onclick = () => {
   render();
   canvas.toBlob(async blob => {
     const d = new Date(), pad = n => String(n).padStart(2, '0');
@@ -617,6 +773,7 @@ $('#bSave').onclick = () => {
 // 提示
 let hintTimer;
 function showHint(msg){
+  if(lesson) return;
   const h = $('#hint'); h.textContent = msg; h.hidden = false; h.style.opacity = 1;
   clearTimeout(hintTimer); hintTimer = setTimeout(() => { h.style.opacity = 0; setTimeout(() => h.hidden = true, 700); }, 4500);
 }
@@ -627,15 +784,28 @@ canvas.addEventListener('pointerdown', e => {
   e.preventDefault(); canvas.setPointerCapture(e.pointerId);
   $$('.sheet').forEach(s => s.hidden = true);
   if(pointers.size === 0) snapshot();
+  document.body.classList.add('drawing');
   const p = pos(e), tool = e.button === 2 ? 'blow' : state.tool;
-  pointers.set(e.pointerId, {x:p.x, y:p.y, dx:0, dy:0, speed:0, tool, ci:tool === 'pour' ? pickColor() : 0,
+  pointers.set(e.pointerId, {x:p.x, y:p.y, sx:p.x, sy:p.y, cx:e.clientX, cy:e.clientY, dx:0, dy:0, speed:0, tool, ci:tool === 'pour' ? pickColor() : 0,
     last:performance.now(), seed:Math.random() * 100, cell:rnd(30, 80)});
+  if(tool === 'tilt'){ const st = $('#stage').getBoundingClientRect(), t = $('#tiltUI'); t.style.left = (e.clientX - st.left) + 'px'; t.style.top = (e.clientY - st.top) + 'px'; t.querySelector('.arm').style.width = '0px'; t.hidden = false; }
 });
 canvas.addEventListener('pointermove', e => {
   const p = pointers.get(e.pointerId); if(!p) return;
   const q = pos(e); p.dx += q.x - p.x; p.dy += q.y - p.y; p.x = q.x; p.y = q.y;
+  if(p.tool === 'tilt'){
+    const ddx = e.clientX - p.cx, ddy = e.clientY - p.cy, len = Math.hypot(ddx, ddy), full = Math.min(innerWidth, innerHeight) * .3;
+    const k = Math.min(len / full, 1) / (len || 1);
+    tiltUI = [ddx * k, -ddy * k];
+    const arm = $('#tiltUI .arm'); arm.style.width = Math.min(len, full) + 'px'; arm.style.transform = `rotate(${Math.atan2(ddy, ddx)}rad)`;
+  }
 });
-const up = e => pointers.delete(e.pointerId);
+const up = e => {
+  const p = pointers.get(e.pointerId);
+  if(p && p.tool === 'tilt'){ tiltUI = [0, 0]; $('#tiltUI').hidden = true; }
+  pointers.delete(e.pointerId); dirty = true;
+  if(!pointers.size) document.body.classList.remove('drawing');
+};
 canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => {
@@ -647,13 +817,246 @@ addEventListener('keydown', e => {
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){ e.preventDefault(); undo(); }
   else if(e.key === 'p' || e.key === 'P') setTool('pour');
   else if(e.key === 'b' || e.key === 'B') setTool('blow');
+  else if(e.key === 't' || e.key === 'T') setTool('tilt');
 });
+
+/* ---------- 暫存與讀檔 ---------- */
+const DB = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open('fluidart', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('works', {keyPath:'id'});
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  async function tx(mode, fn){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const t = db.transaction('works', mode), req = fn(t.objectStore('works'));
+      t.oncomplete = () => res(req.result); t.onerror = () => rej(t.error);
+    });
+  }
+  return {put:r => tx('readwrite', s => s.put(r)), get:id => tx('readonly', s => s.get(id)),
+    all:() => tx('readonly', s => s.getAll()), del:id => tx('readwrite', s => s.delete(id))};
+})();
+let dirty = false, saving = false, started = false, fromStart = false;
+state.workId = null;
+function newWork(){ state.workId = null; clearHistory(); }
+function pack(dst, mode){
+  const u = P.pack.use();
+  gl.uniform2f(u.texelSize, dye.tx, dye.ty); gl.uniform1i(u.uDye, dye.read.bind(0)); gl.uniform1i(u.uAux, aux.read.bind(1));
+  gl.uniform1i(u.uMode, mode); blit(dst);
+}
+const packCanvas = document.createElement('canvas');
+function fboToBlob(f){
+  const buf = new Uint8ClampedArray(f.w * f.h * 4);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, f.fbo); gl.readPixels(0, 0, f.w, f.h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+  packCanvas.width = f.w; packCanvas.height = f.h;
+  packCanvas.getContext('2d').putImageData(new ImageData(buf, f.w, f.h), 0, 0);
+  return new Promise(r => packCanvas.toBlob(r, 'image/png'));
+}
+async function blobToFBO(blob){
+  const bmp = await createImageBitmap(blob, {premultiplyAlpha:'none', colorSpaceConversion:'none'});
+  const f = makeFBO(bmp.width, bmp.height, true);
+  gl.bindTexture(gl.TEXTURE_2D, f.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, bmp);
+  bmp.close && bmp.close();
+  return f;
+}
+function makeThumb(){
+  render();
+  const c = document.createElement('canvas'), k = 240 / Math.max(canvas.width, canvas.height);
+  c.width = Math.round(canvas.width * k); c.height = Math.round(canvas.height * k);
+  c.getContext('2d').drawImage(canvas, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', .75);
+}
+async function saveWork(id){
+  const thumb = makeThumb();
+  const a = makeFBO(dye.w, dye.h, true), b = makeFBO(dye.w, dye.h, true);
+  pack(a, 0); pack(b, 1);
+  const color = await fboToBlob(a), data = await fboToBlob(b);
+  a.free(); b.free();
+  await DB.put({id, workId:state.workId, time:Date.now(), palette:JSON.parse(JSON.stringify(pal)), color, data, thumb});
+}
+async function loadWork(id){
+  const rec = await DB.get(id); if(!rec) return false;
+  const c = await blobToFBO(rec.color), d = await blobToFBO(rec.data);
+  snapshot();
+  const u = P.unpack.use();
+  gl.uniform2f(u.texelSize, c.tx, c.ty); gl.uniform1i(u.uC, c.bind(0)); gl.uniform1i(u.uD, d.bind(1));
+  gl.uniform1i(u.uMode, 0); blit(dye.read); gl.uniform1i(u.uMode, 1); blit(aux.read);
+  setTo(vel.read, [0,0,0,1]); setTo(pres.read, [0,0,0,1]);
+  c.free(); d.free();
+  pal = rec.palette; state.sel = -1; savePal(); renderSwatches();
+  state.workId = id === 'auto' ? rec.workId || null : id;
+  clearHistory();
+  return true;
+}
+async function autosave(force){
+  if((!dirty && !force) || saving || pointers.size || !started) return;
+  saving = true; dirty = false;
+  try{ await saveWork('auto'); }catch(e){ console.warn('autosave', e); }
+  saving = false;
+}
+setInterval(autosave, 45000);
+document.addEventListener('visibilitychange', () => { if(document.hidden) autosave(); });
+addEventListener('pagehide', () => autosave());
+const fmtTime = t => { const d = new Date(t), p = n => String(n).padStart(2, '0'); return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+async function renderWorks(){
+  const box = $('#works'); box.innerHTML = '<p class="tip">讀取中…</p>';
+  let list = [];
+  try{ list = await DB.all(); }catch(e){ box.innerHTML = '<p class="tip">這個瀏覽器無法暫存作品（可能是無痕模式）。</p>'; return; }
+  list.sort((a, b) => (b.id === 'auto') - (a.id === 'auto') || b.time - a.time);
+  box.innerHTML = list.length ? '' : '<p class="tip">還沒有暫存的作品。畫到一半按「暫存」就會出現在這裡。</p>';
+  list.forEach(r => {
+    const row = document.createElement('div'); row.className = 'work';
+    row.innerHTML = `<img alt=""><div class="meta">${r.id === 'auto' ? '自動暫存' : '作品'}<br><small>${fmtTime(r.time)}${r.id === state.workId ? '・目前' : ''}</small></div><button class="load">讀取</button><button class="del">刪除</button>`;
+    row.querySelector('img').src = r.thumb;
+    row.querySelector('.load').onclick = async () => {
+      if(dirty || hist.length) await autosave(true);
+      if(await loadWork(r.id)){ $('#fileSheet').hidden = true; closeStart(); showHint('已讀取作品，可以繼續畫'); }
+    };
+    row.querySelector('.del').onclick = async () => {
+      if(!confirm('確定刪除這個暫存的作品？')) return;
+      await DB.del(r.id); if(state.workId === r.id) state.workId = null; renderWorks();
+    };
+    box.appendChild(row);
+  });
+}
+$('#fSave').onclick = async () => {
+  if(!state.workId) state.workId = 'w' + Date.now();
+  try{ await saveWork(state.workId); await saveWork('auto'); dirty = false; showHint('已暫存，之後可以在「檔案」裡讀取'); renderWorks(); }
+  catch(e){ showHint('暫存失敗：' + (e.message || e)); }
+};
+$('#fHome').onclick = async () => { $('#fileSheet').hidden = true; endLesson(); await autosave(true); openStart(); };
+
+/* ---------- 開始畫面 ---------- */
+async function openStart(){
+  started = false; fromStart = true;
+  $('#start').hidden = false; $('#startMain').hidden = false; $('#startLessons').hidden = true;
+  const btn = $('#sContinue'); btn.hidden = true;
+  try{
+    const rec = await DB.get('auto');
+    if(rec){ btn.hidden = false; btn.querySelector('img').src = rec.thumb; btn.querySelector('small').textContent = '上次畫到 ' + fmtTime(rec.time); }
+  }catch(e){}
+}
+function closeStart(){ $('#start').hidden = true; started = true; fromStart = false; }
+$('#sContinue').onclick = async () => { if(await loadWork('auto')) closeStart(); };
+$$('[data-start]').forEach(b => b.onclick = () => {
+  const k = b.dataset.start;
+  if(k === 'tpl') openSheet('tplSheet');
+  else if(k === 'blank'){ newWork(); clearCanvas(); closeStart(); setTool('pour'); dirty = true; showHint('選一個顏色，按住畫布倒顏料'); }
+  else if(k === 'lesson'){ renderLessons(); $('#startMain').hidden = true; $('#startLessons').hidden = false; }
+  else if(k === 'back'){ $('#startMain').hidden = false; $('#startLessons').hidden = true; }
+  else if(k === 'works') openSheet('fileSheet');
+});
+
+/* ---------- 教學 ---------- */
+const lumIdx = () => pal.colors.map((c, i) => [lum(c), i]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+const paintIdx = () => lumIdx().filter(i => lum(pal.colors[i]) < .85);
+function whiteIdx(){
+  let i = pal.colors.findIndex(c => lum(c) > .85);
+  if(i < 0){ pal.colors.push('#ffffff'); savePal(); i = pal.colors.length - 1; }
+  return i;
+}
+function useColor(i){ state.sel = i; setTool('pour'); renderSwatches(); }
+const sizeTo = v => { state.size = v; sizeEl.value = v; };
+const S_PAL = {text:'先挑一組配色。下方會打開配色面板，點一組喜歡的模板，也可以再點顏色微調。選好按「下一步」。', before:() => openSheet('palSheet'), hl:'#bPal'};
+const LESSONS = [
+  {name:'海浪', desc:'倒出深淺不同的海，再用吹風把白色吹成浪花蕾絲。', tpl:'0-0', skip:5, steps:[
+    S_PAL,
+    {text:'先倒最深的海。已經幫你選好最深的顏色，在畫面<b>最上方</b>按住，左右慢慢拖，像畫一條粗線。', goal:['pour', 2.5],
+      before:() => { $('#palSheet').hidden = true; const p = paintIdx(); useColor(p[0]); sizeTo(.09); }, hl:'.tool[data-tool=pour]'},
+    {text:'接著倒中間的藍，緊貼在剛剛那條<b>下面</b>，一樣左右拖。', goal:['pour', 2.5], before:() => { const p = paintIdx(); useColor(p[Math.floor(p.length / 2)]); }},
+    {text:'再倒淺色，越往下越淺，這裡會靠近海灘。', goal:['pour', 2], before:() => { const p = paintIdx(); useColor(p[p.length - 1]); }},
+    {text:'最後倒白色當浪花，倒在淺色的<b>最下緣</b>，薄薄一條就好。', goal:['pour', 1.5], before:() => { useColor(whiteIdx()); sizeTo(.06); }},
+    {text:'重頭戲來了！已切到「吹」。從白色<b>下方往上</b>（往海的方向）一小段一小段地拖，白色變薄的地方會長出蕾絲泡沫。', goal:['blow', 1.2],
+      before:() => setTool('blow'), hl:'.tool[data-tool=blow]'},
+    {text:'試試傾斜畫布：已切到「傾斜」，在畫面上<b>往上方</b>輕輕拖住，顏料就會往那邊流。放開就回到水平。', goal:['tilt', 1.5],
+      before:() => setTool('tilt'), hl:'.tool[data-tool=tilt]'},
+    {text:'想要更多泡沫或更立體？打開的設定裡可以調「泡沫蕾絲」和「立體感」。調好按「下一步」。', before:() => openSheet('setSheet'), hl:'#bSet'},
+    {text:'完成了！這幅海浪是你獨一無二的作品。按「檔案」可以存成圖片，或暫存起來之後繼續修。', before:() => { $('#setSheet').hidden = true; }, hl:'#bFile'},
+  ]},
+  {name:'同心圓倒畫', desc:'在中央一直倒，顏料一圈圈長大，再傾斜畫布讓它流成花。', tpl:'1-0', skip:3, steps:[
+    S_PAL,
+    {text:'已選「輪流換色」（彩虹圓圈）。在畫布<b>中央按住不動</b>，顏料會一圈一圈長大，按住大約 6 秒。', goal:['pour', 5.5],
+      before:() => { $('#palSheet').hidden = true; state.sel = -1; setTool('pour'); renderSwatches(); sizeTo(.05); }, hl:'.sw.rot'},
+    {text:'可以在同一點繼續倒讓圓更大，或換個位置倒第二朵。', goal:['pour', 2]},
+    {text:'切到「傾斜」，往不同方向各拖一下，讓圓圈流成花瓣的形狀。', goal:['tilt', 3], before:() => setTool('tilt'), hl:'.tool[data-tool=tilt]'},
+    {text:'切到「吹」，從圓心往外輕輕吹出幾道放射紋。', goal:['blow', .8], before:() => setTool('blow'), hl:'.tool[data-tool=blow]'},
+    {text:'完成！每次倒的時間、傾斜的方向都會讓結果不一樣。按「檔案」存下來吧。', hl:'#bFile'},
+  ]},
+  {name:'大理石紋', desc:'從條紋模板開始，吹出、流出優雅的大理石紋路。', tpl:'3-0', skip:1, tplOnly:true, steps:[
+    S_PAL,
+    {text:'用「吹」<b>橫向</b>拖過整個畫面，條紋會被拉成大理石紋。', goal:['blow', 1.5], before:() => setTool('blow'), hl:'.tool[data-tool=blow]'},
+    {text:'換個方向，<b>斜斜地</b>再吹一兩次，紋路會更有層次。', goal:['blow', 1]},
+    {text:'切到「傾斜」，往旁邊拖住，讓紋路慢慢流動延伸。', goal:['tilt', 2], before:() => setTool('tilt'), hl:'.tool[data-tool=tilt]'},
+    {text:'最後用最淺的顏色點幾滴點綴，按一下就放開。', goal:['pour', .8], before:() => { const l = lumIdx(); useColor(l[l.length - 1]); sizeTo(.04); }},
+    {text:'完成！按「檔案」存成圖片或暫存。', hl:'#bFile'},
+  ]},
+];
+let lesson = null;
+function renderLessons(){
+  const box = $('#lessonList'); box.innerHTML = '';
+  LESSONS.forEach(L => {
+    const d = document.createElement('div'); d.className = 'lesson';
+    d.innerHTML = `<b>${L.name}</b><p>${L.desc}</p><div class="acts">${L.tplOnly ? '' : '<button data-m="blank">從空白畫布開始</button>'}<button data-m="tpl" class="${L.tplOnly ? '' : 'alt'}">從模板開始</button></div>`;
+    d.querySelectorAll('button').forEach(b => b.onclick = () => startLesson(L, b.dataset.m === 'tpl'));
+    box.appendChild(d);
+  });
+}
+function startLesson(L, fromTpl){
+  newWork(); closeStart(); clearCanvas(); dirty = true;
+  lesson = {L, i:0, fromTpl};
+  gotoStep(0);
+}
+function gotoStep(i){
+  const L = lesson.L;
+  // 從模板開始：配色選完後套模板，再跳到吹的步驟
+  if(lesson.fromTpl && lesson.i === 0 && i === 1){ applyTemplate(L.tpl); i = L.skip; }
+  if(i >= L.steps.length) return endLesson();
+  lesson.i = i; const st = L.steps[i];
+  lesson.base = Object.assign({}, stats); lesson.done = !st.goal;
+  $$('.sheet').forEach(e => e.hidden = true);
+  if(st.before) st.before();
+  $$('.pulse').forEach(e => e.classList.remove('pulse'));
+  if(st.hl) $$(st.hl).forEach(e => e.classList.add('pulse'));
+  $('#coach').hidden = false;
+  $('#coachName').textContent = '教學：' + L.name;
+  $('#coachStep').textContent = `第 ${i + 1} / ${L.steps.length} 步`;
+  $('#coachText').innerHTML = st.text;
+  $('#coachBar').style.display = st.goal ? '' : 'none';
+  $('#coachBar i').style.width = '0';
+  $('#coachNext').textContent = i === L.steps.length - 1 ? '完成' : '下一步';
+  $('#coachNext').disabled = false;
+  $('#coachNext').classList.toggle('pulse', !st.goal);
+}
+function coachTick(){
+  if(!lesson || lesson.done) return;
+  const [k, need] = lesson.L.steps[lesson.i].goal;
+  const pr = Math.min(1, (stats[k] - lesson.base[k]) / need);
+  $('#coachBar i').style.width = (pr * 100) + '%';
+  if(pr >= 1){
+    lesson.done = true;
+    $('#coachText').insertAdjacentHTML('beforeend', ' <span class="good">做得好！可以繼續玩，滿意了就按「下一步」。</span>');
+    $('#coachNext').classList.add('pulse');
+  }
+}
+function endLesson(){
+  if(!lesson) return;
+  lesson = null; $('#coach').hidden = true;
+  $$('.pulse').forEach(e => e.classList.remove('pulse'));
+}
+$('#coachNext').onclick = () => { if(lesson) gotoStep(lesson.i + 1); };
+$('#coachQuit').onclick = () => { endLesson(); showHint('已結束教學，可以自由繼續畫'); };
 
 /* ---------- 開始 ---------- */
 applyLayout(); syncSettings(); renderSwatches();
 resize();
-TEMPLATES.wave(); setTool('blow');
-showHint('先試試看：用「吹」從白色那排往上拖，吹出浪花');
+// 開始畫面背景：隨機一個構圖
+{ const demos = ['0-0', '0-2', '1-0', '1-3', '3-1']; TEMPLATES[demos[Math.floor(Math.random() * demos.length)]](); setTool('blow'); }
+openStart();
 requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
 if(S.tilt === 'on') { S.tilt = 'off'; syncSettings(); }
 </script>
