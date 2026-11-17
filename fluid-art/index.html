@@ -228,7 +228,7 @@ const P = {
     uniform float uDead;
     void main(){ vec2 v=texture(uVel,vUv).xy; v*=smoothstep(uDead,uDead*3.,length(v));
       vec2 c=vUv-uDt*v*uVelTx; vec4 s=texture(uSrc,c);
-      if(uThin>0.){ float d=clamp(texture(uDiv,vUv).x,0.,3.); s*=exp(-d*uDt*uThin); }
+      if(uThin>0.){ float d=clamp(texture(uDiv,vUv).x,0.,3.); float k=max(smoothstep(.45,.8,s.a),smoothstep(1.5,3.,d)); s*=exp(-d*uDt*uThin*k); }
       o=s/(1.+uDiss*uDt); }`),
   div: program(`uniform sampler2D uVel;
     void main(){ float L=texture(uVel,vL).x, R=texture(uVel,vR).x, T=texture(uVel,vT).y, B=texture(uVel,vB).y;
@@ -250,7 +250,7 @@ const P = {
   // 顏料厚度造成的攤開（不經過不可壓縮投影），以及手機傾斜時往下流
   spread: program(`uniform sampler2D uVel, uDye; uniform float uS; uniform vec2 uTilt;
     void main(){ float L=texture(uDye,vL).a, R=texture(uDye,vR).a, T=texture(uDye,vT).a, B=texture(uDye,vB).a, h=texture(uDye,vUv).a;
-      vec2 v=texture(uVel,vUv).xy - vec2(R-L,T-B)*.5*uS*min(h,2.)*smoothstep(.25,.8,h) + uTilt*min(h,2.)*h;
+      vec2 v=texture(uVel,vUv).xy - vec2(R-L,T-B)*.5*uS*min(h,2.)*smoothstep(.5,1.,h) + uTilt*min(h,2.)*h;
       o=vec4(v,0.,1.); }`),
   // 吹得快、又在顏色交界的地方長出泡沫
   foam: program(`uniform sampler2D uAux, uVel, uDye; uniform float uRate, uDt;
@@ -322,7 +322,7 @@ function makeDouble(w, h){
 }
 
 const QUALITY = {low:{sim:128, dye:640}, std:{sim:176, dye:1024}, high:{sim:240, dye:1536}};
-let vel, dye, aux, pres, divF, curlF, aspect = 1, simKey = '';
+let vel, flow, dye, aux, pres, divF, curlF, aspect = 1, simKey = '';
 function resolution(r){
   let a = canvas.width / canvas.height; const inv = a < 1; if(inv) a = 1 / a;
   const mn = Math.round(r), mx = Math.round(r * a);
@@ -341,8 +341,8 @@ function initSim(){
   if(key === simKey) return;
   simKey = key; aspect = canvas.width / canvas.height;
   const old = dye ? {dye, aux} : null;
-  if(vel){ vel.free(); pres.free(); divF.free(); curlF.free(); }
-  vel = makeDouble(sr.w, sr.h); pres = makeDouble(sr.w, sr.h);
+  if(vel){ vel.free(); flow.free(); pres.free(); divF.free(); curlF.free(); }
+  vel = makeDouble(sr.w, sr.h); flow = makeDouble(sr.w, sr.h); pres = makeDouble(sr.w, sr.h);
   divF = makeFBO(sr.w, sr.h); curlF = makeFBO(sr.w, sr.h);
   dye = makeDouble(dr.w, dr.h); aux = makeDouble(dr.w, dr.h);
   setTo(aux.read, [1,0,0,1]);
@@ -396,11 +396,11 @@ function splatVel(x, y, fx, fy, r){
   gl.uniform2f(u.uPoint, x, y); gl.uniform2f(u.uForce, fx, fy); gl.uniform1f(u.uR, r); gl.uniform1f(u.uAspect, aspect);
   blit(vel.write); vel.swap();
 }
-function radial(x, y, r, s){
+function radial(x, y, r, s, t = flow){
   const u = P.radial.use();
-  gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uT, vel.read.bind(0));
+  gl.uniform2f(u.texelSize, t.tx, t.ty); gl.uniform1i(u.uT, t.read.bind(0));
   gl.uniform2f(u.uPoint, x, y); gl.uniform1f(u.uR, r); gl.uniform1f(u.uS, s); gl.uniform1f(u.uAspect, aspect);
-  blit(vel.write); vel.swap();
+  blit(t.write); t.swap();
 }
 
 /* ---------- 模擬 ---------- */
@@ -426,23 +426,24 @@ function step(dt){
   for(let i = 0; i < 20; i++){ gl.uniform1i(u.uP, pres.read.bind(1)); blit(pres.write); pres.swap(); }
   u = P.grad.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uP, pres.read.bind(0)); gl.uniform1i(u.uVel, vel.read.bind(1));
   blit(vel.write); vel.swap();
-  // 不可壓縮投影之後才加的力：顏料攤開、倒顏料往外推、吹風往外推、傾斜
+  // 只在局部作用、不進入不可壓縮場的流動（顏料攤開、倒顏料往外推、吹風往外推、傾斜）。
+  // 這些放在另一張 flow 貼圖，每幀重新計算，只拿來搬顏料，所以不會牽動遠處的顏料。
   u = P.spread.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1i(u.uDye, dye.read.bind(1));
-  gl.uniform1f(u.uS, S.spread); gl.uniform2f(u.uTilt, tilt[0] * 60, tilt[1] * 60); blit(vel.write); vel.swap();
+  gl.uniform1f(u.uS, S.spread); gl.uniform2f(u.uTilt, tilt[0] * 60, tilt[1] * 60); blit(flow.write); flow.swap();
   for(const p of pointers.values()){
     if(p.tool === 'pour') radial(p.x, p.y, R * 1.3, 18);
-    else radial(p.x, p.y, R * 1.2, 30 * S.blow * Math.max(0, 1 - p.speed * 80));
+    else radial(p.x, p.y, R * 1.2, 90 * S.blow * Math.max(0, 1 - p.speed * 80));
   }
-  u = P.div.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); blit(divF);
+  u = P.div.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, flow.read.bind(0)); blit(divF);
   // 平流
   u = P.advect.use(); gl.uniform2f(u.uVelTx, vel.tx, vel.ty); gl.uniform1f(u.uDt, dt); gl.uniform1i(u.uDiv, divF.bind(2));
   gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1i(u.uSrc, vel.read.bind(0));
   gl.uniform1f(u.uDiss, S.viscosity); gl.uniform1f(u.uThin, 0); gl.uniform1f(u.uDead, 0); blit(vel.write); vel.swap();
-  gl.uniform2f(u.texelSize, dye.tx, dye.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1f(u.uDiss, 0); gl.uniform1f(u.uDead, DEAD);
+  gl.uniform2f(u.texelSize, dye.tx, dye.ty); gl.uniform1i(u.uVel, flow.read.bind(0)); gl.uniform1f(u.uDiss, 0); gl.uniform1f(u.uDead, DEAD);
   gl.uniform1i(u.uSrc, dye.read.bind(1)); gl.uniform1f(u.uThin, THIN); blit(dye.write); dye.swap();
   gl.uniform1i(u.uSrc, aux.read.bind(1)); gl.uniform1f(u.uThin, 0); blit(aux.write); aux.swap();
   u = P.foam.use(); gl.uniform2f(u.texelSize, dye.tx * 2, dye.ty * 2); gl.uniform1i(u.uAux, aux.read.bind(0));
-  gl.uniform1i(u.uVel, vel.read.bind(1)); gl.uniform1i(u.uDye, dye.read.bind(2)); gl.uniform1f(u.uRate, 2.5); gl.uniform1f(u.uDt, dt);
+  gl.uniform1i(u.uVel, flow.read.bind(1)); gl.uniform1i(u.uDye, dye.read.bind(2)); gl.uniform1f(u.uRate, 2.5); gl.uniform1f(u.uDt, dt);
   blit(aux.write); aux.swap();
   // 倒顏料
   const now = performance.now();
