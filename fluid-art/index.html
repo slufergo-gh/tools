@@ -140,10 +140,14 @@ body:not(.pc):has(.sheet:not([hidden])) #coach{top:8px;bottom:auto}
 .askbox .acts{display:flex;gap:10px;justify-content:flex-end}
 .askbox button{border:0;border-radius:10px;padding:10px 18px;font-size:15px;cursor:pointer;background:#2a3640;color:var(--fg)}
 .askbox button.danger{background:#d64545;color:#fff}
+#brush{position:absolute;left:0;top:0;border-radius:50%;pointer-events:none;z-index:3;transform:translate(-50%,-50%);
+  border:2px solid rgba(255,255,255,.9);box-shadow:0 0 0 1px rgba(0,0,0,.45),inset 0 0 0 1px rgba(0,0,0,.45)}
+#brush.blow{border-style:dashed}
 </style>
 </head>
 <body>
 <div id="stage"><canvas id="c"></canvas><div id="hint" hidden></div>
+  <div id="brush" hidden></div>
   <div id="tiltUI" hidden><div class="arm"></div><div class="dot"></div></div>
   <div id="coach" hidden>
     <div class="top"><span id="coachStep"></span><span><span id="coachName"></span><button class="tog" id="coachTog">收合</button></span></div>
@@ -691,7 +695,7 @@ function renderTplSheet(){
 /* ---------- 介面 ---------- */
 function nextColor(){ const i = state.rot % pal.colors.length; state.rot++; return i; }
 function pickColor(){ return state.sel >= 0 && state.sel < pal.colors.length ? state.sel : nextColor(); }
-function setTool(t){ state.tool = t; $$('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t)); }
+function setTool(t){ state.tool = t; $$('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t)); if(brushAt) showBrush(brushAt.x, brushAt.y); else if(typeof hideBrush === 'function' && !pointers.size) hideBrush(); }
 function savePal(){ store.set('palette', pal); }
 function renderSwatches(){
   const sw = $('#sw'); sw.innerHTML = '';
@@ -738,7 +742,7 @@ $('#bSet').onclick = () => openSheet('setSheet');
 $('#bUndo').onclick = () => { undo(); dirty = true; };
 $$('.tool').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 const sizeEl = $('#size'); sizeEl.value = state.size;
-sizeEl.oninput = () => { state.size = +sizeEl.value; store.set('size', state.size); };
+sizeEl.oninput = () => { state.size = +sizeEl.value; store.set('size', state.size); previewBrush(); };
 
 // 設定
 function applyLayout(){
@@ -799,6 +803,29 @@ function showHint(msg){
   clearTimeout(hintTimer); hintTimer = setTimeout(() => { h.style.opacity = 0; setTimeout(() => h.hidden = true, 700); }, 4500);
 }
 
+// 筆刷圓圈：顯示倒顏料／吹風的實際範圍
+let brushAt = null, brushTimer = 0;
+function showBrush(cx, cy, tool){
+  const b = $('#brush');
+  tool = tool || state.tool;
+  if(tool === 'tilt'){ b.hidden = true; return; }
+  const st = $('#stage').getBoundingClientRect(), r = canvas.getBoundingClientRect();
+  const rad = state.size * r.height * (tool === 'blow' ? 1.4 : 1);
+  b.style.width = b.style.height = (rad * 2) + 'px';
+  b.style.left = (cx - st.left) + 'px'; b.style.top = (cy - st.top) + 'px';
+  b.classList.toggle('blow', tool === 'blow');
+  b.hidden = false;
+}
+function hideBrush(){ $('#brush').hidden = true; }
+function previewBrush(){
+  // 調整大小時：滑鼠在畫布上就顯示在滑鼠位置，否則顯示在畫布中央
+  const r = canvas.getBoundingClientRect();
+  const at = brushAt || {x:r.left + r.width / 2, y:r.top + r.height / 2};
+  showBrush(at.x, at.y);
+  clearTimeout(brushTimer);
+  if(!brushAt) brushTimer = setTimeout(() => { if(!pointers.size) hideBrush(); }, 1200);
+}
+
 // 指標
 function pos(e){ const r = canvas.getBoundingClientRect(); return {x:(e.clientX - r.left) / r.width, y:1 - (e.clientY - r.top) / r.height}; }
 canvas.addEventListener('pointerdown', e => {
@@ -809,10 +836,14 @@ canvas.addEventListener('pointerdown', e => {
   const p = pos(e), tool = e.button === 2 ? 'blow' : state.tool;
   pointers.set(e.pointerId, {x:p.x, y:p.y, sx:p.x, sy:p.y, cx:e.clientX, cy:e.clientY, dx:0, dy:0, speed:0, tool, ci:tool === 'pour' ? pickColor() : 0,
     last:performance.now(), seed:Math.random() * 100, cell:rnd(30, 80)});
+  showBrush(e.clientX, e.clientY, tool);
   if(tool === 'tilt'){ const st = $('#stage').getBoundingClientRect(), t = $('#tiltUI'); t.style.left = (e.clientX - st.left) + 'px'; t.style.top = (e.clientY - st.top) + 'px'; t.querySelector('.arm').style.width = '0px'; t.hidden = false; }
 });
 canvas.addEventListener('pointermove', e => {
-  const p = pointers.get(e.pointerId); if(!p) return;
+  const p = pointers.get(e.pointerId);
+  if(e.pointerType === 'mouse') brushAt = {x:e.clientX, y:e.clientY};
+  if(p || e.pointerType === 'mouse') showBrush(e.clientX, e.clientY, p ? p.tool : state.tool);
+  if(!p) return;
   const q = pos(e); p.dx += q.x - p.x; p.dy += q.y - p.y; p.x = q.x; p.y = q.y;
   if(p.tool === 'tilt'){
     const ddx = e.clientX - p.cx, ddy = e.clientY - p.cy, len = Math.hypot(ddx, ddy), full = Math.min(innerWidth, innerHeight) * .3;
@@ -826,12 +857,15 @@ const up = e => {
   if(p && p.tool === 'tilt'){ tiltUI = [0, 0]; $('#tiltUI').hidden = true; }
   pointers.delete(e.pointerId); dirty = true;
   if(!pointers.size) document.body.classList.remove('drawing');
+  if(e.pointerType !== 'mouse' && !pointers.size) hideBrush();
+  else if(e.pointerType === 'mouse') showBrush(e.clientX, e.clientY);
 };
 canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerleave', e => { if(e.pointerType === 'mouse'){ brushAt = null; if(!pointers.size) hideBrush(); } });
 canvas.addEventListener('wheel', e => {
   e.preventDefault(); state.size = Math.max(.02, Math.min(.25, state.size * (e.deltaY > 0 ? .9 : 1.1)));
-  sizeEl.value = state.size; store.set('size', state.size);
+  sizeEl.value = state.size; store.set('size', state.size); previewBrush();
 }, {passive:false});
 addEventListener('keydown', e => {
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
