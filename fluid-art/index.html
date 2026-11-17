@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0f1418">
+<meta name="apple-mobile-web-app-title" content="流動畫">
+<title>流動畫</title>
+<style>
+:root{--bg:#0f1418;--panel:rgba(20,27,33,.92);--line:#2a3640;--fg:#e9eef2;--muted:#8a99a6;--accent:#4aa3ff;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC","Noto Sans TC",system-ui,sans-serif;display:flex;flex-direction:column;
+  -webkit-user-select:none;user-select:none}
+#stage{flex:1;position:relative;min-height:0;min-width:0}
+#c{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block;cursor:crosshair}
+#bar{flex:none;background:var(--panel);border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;
+  padding:8px max(10px,env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+.row{display:flex;align-items:center;gap:8px;min-width:0}
+#sw{display:flex;gap:8px;overflow-x:auto;flex:1;padding:4px;scrollbar-width:none}
+#sw::-webkit-scrollbar{display:none}
+.sw{width:34px;height:34px;border-radius:50%;flex:none;border:2px solid rgba(255,255,255,.3);padding:0;cursor:pointer}
+.sw.on{outline:3px solid #fff;outline-offset:2px}
+.sw.rot{background:conic-gradient(#f55,#fc5,#5c7,#4af,#a6f,#f55)}
+button{font:inherit;color:inherit}
+.btn{background:transparent;border:0;border-radius:12px;min-width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;padding:0 6px;color:var(--fg)}
+.btn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.btn small{font-size:10px;color:var(--muted)}
+.btn:active{background:rgba(255,255,255,.08)}
+.btn:disabled{opacity:.35}
+.tool.on{background:var(--accent);color:#fff}
+.tool.on small{color:#fff}
+.spacer{flex:1}
+#size{width:96px;accent-color:var(--accent)}
+.sizewrap{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px}
+/* 電腦版：左側直欄 */
+body.pc{flex-direction:row-reverse}
+body.pc #bar{width:92px;border-top:0;border-left:0;border-right:1px solid var(--line);padding:12px 8px;overflow-y:auto}
+body.pc .row{flex-direction:column}
+body.pc #sw{flex-direction:column;overflow-x:visible;overflow-y:auto;flex:none;max-height:none;align-items:center}
+body.pc .sizewrap{flex-direction:column}
+body.pc #size{width:72px}
+body.pc .spacer{display:none}
+/* 面板 */
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:72vh;overflow-y:auto;background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:0 16px calc(20px + env(safe-area-inset-bottom));z-index:10;user-select:auto}
+body.pc .sheet{left:auto;top:0;width:360px;max-height:none;border-radius:0;border-top:0;border-left:1px solid var(--line)}
+.sheet header{position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 0 10px;background:inherit}
+.sheet header b{font-size:18px}
+.sheet h3{font-size:13px;color:var(--muted);font-weight:500;margin:16px 0 8px}
+.done{background:var(--accent);border:0;border-radius:10px;padding:8px 16px;color:#fff;cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{position:relative;width:46px;height:46px}
+.chip label{display:block;width:100%;height:100%;border-radius:50%;border:2px solid rgba(255,255,255,.3);cursor:pointer;overflow:hidden}
+.chip input{opacity:0;width:100%;height:100%;cursor:pointer;border:0;padding:0}
+.chip .del{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:#333;color:#fff;font-size:13px;line-height:22px;padding:0;cursor:pointer}
+.add{width:46px;height:46px;border-radius:50%;border:2px dashed var(--muted);background:transparent;font-size:24px;color:var(--muted);cursor:pointer}
+.pair{display:flex;gap:16px;margin-top:6px}
+.pair .item{display:flex;align-items:center;gap:8px;font-size:14px}
+.tpl{display:flex;align-items:center;gap:12px;width:100%;background:transparent;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;cursor:pointer;text-align:left}
+.tpl.on{border-color:var(--accent)}
+.tpl .bars{display:flex;flex:1;height:22px;border-radius:6px;overflow:hidden}
+.tpl .bars i{flex:1}
+.tpl span{width:76px;font-size:14px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.grid button{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:12px;padding:14px 4px;cursor:pointer;font-size:14px}
+.set{display:flex;align-items:center;gap:12px;padding:8px 0;font-size:14px}
+.set label{width:84px;flex:none}
+.set input[type=range]{flex:1;accent-color:var(--accent)}
+.set select{flex:1;background:#1c252c;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px}
+.tip{font-size:12px;color:var(--muted);line-height:1.6}
+#hint{position:absolute;left:50%;top:16px;transform:translateX(-50%);background:rgba(0,0,0,.65);color:#fff;padding:10px 16px;border-radius:12px;font-size:14px;
+  max-width:calc(100% - 32px);text-align:center;pointer-events:none;transition:opacity .6s}
+#fail[hidden]{display:none}
+#fail{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;background:var(--bg);z-index:20;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c"></canvas><div id="hint" hidden></div></div>
+
+<div id="bar">
+  <div class="row">
+    <div id="sw"></div>
+    <div class="sizewrap"><span>筆刷</span><input id="size" type="range" min="0.02" max="0.25" step="0.005" value="0.07" aria-label="筆刷大小"></div>
+  </div>
+  <div class="row">
+    <button class="btn tool on" data-tool="pour" title="倒顏料 (P)"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z"/></svg><small>倒</small></button>
+    <button class="btn tool" data-tool="blow" title="吹風 (B，滑鼠右鍵也是吹風)"><svg viewBox="0 0 24 24"><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/></svg><small>吹</small></button>
+    <span class="spacer"></span>
+    <button class="btn" id="bUndo" title="復原 (Ctrl+Z)" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg><small>復原</small></button>
+    <button class="btn" id="bTpl" title="一鍵構圖"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><small>構圖</small></button>
+    <button class="btn" id="bPal" title="配色"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5S14 15 15 15h2a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7.5" r="1"/></svg><small>配色</small></button>
+    <button class="btn" id="bSet" title="設定"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg><small>設定</small></button>
+    <button class="btn" id="bSave" title="存圖"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><small>存圖</small></button>
+  </div>
+</div>
+
+<div class="sheet" id="tplSheet" hidden>
+  <header><b>一鍵構圖</b><button class="done" data-close>完成</button></header>
+  <p class="tip">選一個起手式，畫布會用目前配色先倒好顏料，接著用「吹」把它吹開。</p>
+  <div class="grid">
+    <button data-tpl="wave">海浪</button>
+    <button data-tpl="ring">同心圓</button>
+    <button data-tpl="splash">隨機潑灑</button>
+    <button data-tpl="stripe">條紋大理石</button>
+    <button data-tpl="cells">細胞</button>
+    <button data-tpl="clear">空白畫布</button>
+  </div>
+</div>
+
+<div class="sheet" id="palSheet" hidden>
+  <header><b>配色</b><button class="done" data-close>完成</button></header>
+  <h3>目前的顏料（點一下改顏色）</h3>
+  <div class="chips" id="curCols"></div>
+  <div class="pair">
+    <div class="item"><div class="chip"><label id="canvasLbl"><input type="color" id="canvasCol"></label></div>畫布</div>
+    <div class="item"><div class="chip"><label id="laceLbl"><input type="color" id="laceCol"></label></div>泡沫</div>
+  </div>
+  <h3>配色模板（選了之後還可以再調）</h3>
+  <div id="tplList"></div>
+</div>
+
+<div class="sheet" id="setSheet" hidden>
+  <header><b>設定</b><button class="done" data-close>完成</button></header>
+  <h3>顏料</h3>
+  <div class="set"><label>黏稠度</label><input type="range" data-k="viscosity" min="0.3" max="6" step="0.1"></div>
+  <div class="set"><label>攤開速度</label><input type="range" data-k="spread" min="0" max="80" step="1"></div>
+  <div class="set"><label>風力</label><input type="range" data-k="blow" min="0.2" max="3" step="0.1"></div>
+  <div class="set"><label>捲曲</label><input type="range" data-k="curl" min="0" max="40" step="1"></div>
+  <h3>效果</h3>
+  <div class="set"><label>泡沫蕾絲</label><input type="range" data-k="foam" min="0" max="1" step="0.05"></div>
+  <div class="set"><label>細胞</label><input type="range" data-k="cells" min="0" max="1" step="0.05"></div>
+  <div class="set"><label>立體感</label><input type="range" data-k="relief" min="0" max="25" step="0.5"></div>
+  <div class="set"><label>光澤</label><input type="range" data-k="gloss" min="0" max="1.5" step="0.05"></div>
+  <h3>其他</h3>
+  <div class="set"><label>畫質</label><select data-k="quality"><option value="low">省電</option><option value="std">標準</option><option value="high">高畫質</option></select></div>
+  <div class="set"><label>介面</label><select data-k="layout"><option value="auto">自動</option><option value="phone">手機</option><option value="pc">電腦</option></select></div>
+  <div class="set"><label>傾斜手機</label><select data-k="tilt"><option value="off">關閉</option><option value="on">開啟（傾斜讓顏料流動）</option></select></div>
+  <p class="tip">電腦操作：左鍵用目前工具、右鍵吹風、滾輪調筆刷大小、P 倒、B 吹、Ctrl+Z 復原。<br>畫面卡頓時把畫質調成「省電」。</p>
+  <div class="set"><button class="done" id="resetSet" style="background:#333">恢復預設</button></div>
+</div>
+
+<div id="fail" hidden></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('fluidart.'+k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('fluidart.'+k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ---------- 配色模板 ---------- */
+const PALETTES = [
+  {name:'海洋', canvas:'#e8d9bd', lace:'#ffffff', colors:['#0b2545','#13426b','#1b6f9e','#2bb3c0','#7fdcd6','#ffffff']},
+  {name:'熱帶海灣', canvas:'#f3e6c8', lace:'#ffffff', colors:['#004e64','#00a5cf','#25a18e','#7ae582','#ffffff']},
+  {name:'夕陽海', canvas:'#1d1230', lace:'#fff4e0', colors:['#2b1a3a','#7b2d5b','#e0475e','#f79d65','#ffd29d','#ffffff']},
+  {name:'大理石金', canvas:'#f4f1ec', lace:'#ffffff', colors:['#111111','#3a3a3a','#d4af37','#c9c4ba','#ffffff']},
+  {name:'銀河', canvas:'#05050f', lace:'#e8f4ff', colors:['#0b0b2b','#3a0ca3','#7209b7','#f72585','#4cc9f0','#ffffff']},
+  {name:'粉彩', canvas:'#fff8f0', lace:'#ffffff', colors:['#ffadad','#ffd6a5','#fdffb6','#caffbf','#9bf6ff','#bdb2ff']},
+  {name:'莫蘭迪', canvas:'#e9e4dc', lace:'#ffffff', colors:['#6b705c','#8e9aaf','#a3b18a','#cbc0d3','#efd3d7','#ffffff']},
+  {name:'火焰', canvas:'#120a05', lace:'#fff3c4', colors:['#370617','#9d0208','#dc2f02','#f48c06','#ffba08','#ffffff']},
+  {name:'森林湖', canvas:'#e4e1d3', lace:'#ffffff', colors:['#081c15','#1b4332','#2d6a4f','#52b788','#b7e4c7','#ffffff']},
+  {name:'珊瑚礁', canvas:'#fdf0e6', lace:'#ffffff', colors:['#118ab2','#06d6a0','#ffd166','#ff8e72','#ff6b6b','#ffffff']},
+  {name:'黑白金', canvas:'#000000', lace:'#ffffff', colors:['#000000','#5c5c5c','#bfa15a','#ffffff']},
+  {name:'薰衣草', canvas:'#f6f2fb', lace:'#ffffff', colors:['#3c2a4d','#6d597a','#b56576','#e3b5d4','#c8b6ff','#ffffff']},
+];
+const DEF = {viscosity:1.6, spread:28, blow:1, curl:10, foam:0.7, cells:0.3, relief:6, gloss:0.6, quality:'std', layout:'auto', tilt:'off'};
+const S = Object.assign({}, DEF, store.get('settings', {}));
+let pal = store.get('palette', null) || JSON.parse(JSON.stringify(PALETTES[0]));
+let state = {tool:'pour', sel:-1, rot:0, size:+store.get('size', 0.07)};
+
+/* ---------- WebGL ---------- */
+const canvas = $('#c');
+function fail(msg){ const f = $('#fail'); f.textContent = msg; f.hidden = false; throw new Error(msg); }
+const gl = canvas.getContext('webgl2', {alpha:false, depth:false, stencil:false, antialias:false, preserveDrawingBuffer:false});
+if(!gl) fail('這個瀏覽器不支援 WebGL2，請改用新版的 Chrome、Safari 或 Edge。');
+if(!gl.getExtension('EXT_color_buffer_float') && !gl.getExtension('EXT_color_buffer_half_float'))
+  fail('這台裝置的顯示晶片不支援流體模擬需要的浮點貼圖。');
+
+function compile(type, src){
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const VS = compile(gl.VERTEX_SHADER, `#version 300 es
+in vec2 aPos; uniform vec2 texelSize; out vec2 vUv,vL,vR,vT,vB;
+void main(){ vUv=aPos*.5+.5; vL=vUv-vec2(texelSize.x,0.); vR=vUv+vec2(texelSize.x,0.);
+ vT=vUv+vec2(0.,texelSize.y); vB=vUv-vec2(0.,texelSize.y); gl_Position=vec4(aPos,0.,1.); }`);
+const HEAD = `#version 300 es
+precision highp float; precision highp sampler2D;
+in vec2 vUv,vL,vR,vT,vB; out vec4 o;
+`;
+function program(src){
+  const p = gl.createProgram();
+  gl.attachShader(p, VS); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, HEAD + src));
+  gl.bindAttribLocation(p, 0, 'aPos'); gl.linkProgram(p);
+  if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for(let i = 0; i < n; i++){ const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+  return {use(){ gl.useProgram(p); return u; }};
+}
+const NOISE = `
+vec2 hash2(vec2 p){ p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))); return fract(sin(p)*43758.5453); }
+float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+  float a=hash2(i).x, b=hash2(i+vec2(1,0)).x, c=hash2(i+vec2(0,1)).x, d=hash2(i+vec2(1,1)).x;
+  return mix(mix(a,b,f.x),mix(c,d,f.x),f.y); }
+float voro(vec2 x){ vec2 n=floor(x), f=fract(x); float f1=8., f2=8.;
+  for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 g=vec2(i,j); vec2 r=g+hash2(n+g)*.9-f; float d=dot(r,r);
+    if(d<f1){ f2=f1; f1=d; } else if(d<f2) f2=d; }
+  return sqrt(f2)-sqrt(f1); }
+`;
+const P = {
+  copy: program(`uniform sampler2D uT; uniform int uMode; uniform vec4 uScale;
+    void main(){ vec4 s=texture(uT,vUv);
+      if(uMode==1){ float a=s.a; o=vec4(a>1e-3? clamp(s.rgb/a,0.,1.):vec3(0), clamp(a*.25,0.,1.)); }
+      else if(uMode==2){ float a=s.a*4.; o=vec4(s.rgb*a,a); }
+      else o=s*uScale; }`),
+  set: program(`uniform vec4 uValue; void main(){ o=uValue; }`),
+  splat: program(`uniform sampler2D uT; uniform vec2 uPoint, uForce; uniform float uR, uAspect;
+    void main(){ vec2 p=vUv-uPoint; p.x*=uAspect; vec4 b=texture(uT,vUv);
+      o=vec4(b.xy+uForce*exp(-dot(p,p)/(uR*uR)),0.,1.); }`),
+  radial: program(`uniform sampler2D uT; uniform vec2 uPoint; uniform float uR, uAspect, uS;
+    void main(){ vec2 p=vUv-uPoint; p.x*=uAspect; vec4 b=texture(uT,vUv);
+      o=vec4(b.xy+p/uR*uS*exp(-dot(p,p)/(uR*uR)),0.,1.); }`),
+  advect: program(`uniform sampler2D uVel, uSrc, uDiv; uniform vec2 uVelTx; uniform float uDt, uDiss, uThin;
+    uniform float uDead;
+    void main(){ vec2 v=texture(uVel,vUv).xy; v*=smoothstep(uDead,uDead*3.,length(v));
+      vec2 c=vUv-uDt*v*uVelTx; vec4 s=texture(uSrc,c);
+      if(uThin>0.){ float d=clamp(texture(uDiv,vUv).x,0.,3.); s*=exp(-d*uDt*uThin); }
+      o=s/(1.+uDiss*uDt); }`),
+  div: program(`uniform sampler2D uVel;
+    void main(){ float L=texture(uVel,vL).x, R=texture(uVel,vR).x, T=texture(uVel,vT).y, B=texture(uVel,vB).y;
+      vec2 C=texture(uVel,vUv).xy; if(vL.x<0.) L=-C.x; if(vR.x>1.) R=-C.x; if(vT.y>1.) T=-C.y; if(vB.y<0.) B=-C.y;
+      o=vec4(.5*(R-L+T-B),0.,0.,1.); }`),
+  curl: program(`uniform sampler2D uVel;
+    void main(){ float L=texture(uVel,vL).y, R=texture(uVel,vR).y, T=texture(uVel,vT).x, B=texture(uVel,vB).x;
+      o=vec4(.5*(R-L-T+B),0.,0.,1.); }`),
+  vort: program(`uniform sampler2D uVel, uCurl; uniform float uCurlS, uDt;
+    void main(){ float L=texture(uCurl,vL).x, R=texture(uCurl,vR).x, T=texture(uCurl,vT).x, B=texture(uCurl,vB).x, C=texture(uCurl,vUv).x;
+      vec2 f=.5*vec2(abs(T)-abs(B),abs(R)-abs(L)); f/=length(f)+1e-4; f*=uCurlS*C; f.y*=-1.;
+      vec2 v=texture(uVel,vUv).xy+f*uDt; o=vec4(clamp(v,-1000.,1000.),0.,1.); }`),
+  pressure: program(`uniform sampler2D uP, uDiv;
+    void main(){ float L=texture(uP,vL).x, R=texture(uP,vR).x, T=texture(uP,vT).x, B=texture(uP,vB).x;
+      o=vec4((L+R+B+T-texture(uDiv,vUv).x)*.25,0.,0.,1.); }`),
+  grad: program(`uniform sampler2D uP, uVel;
+    void main(){ float L=texture(uP,vL).x, R=texture(uP,vR).x, T=texture(uP,vT).x, B=texture(uP,vB).x;
+      vec2 v=texture(uVel,vUv).xy-vec2(R-L,T-B); o=vec4(v,0.,1.); }`),
+  // 顏料厚度造成的攤開（不經過不可壓縮投影），以及手機傾斜時往下流
+  spread: program(`uniform sampler2D uVel, uDye; uniform float uS; uniform vec2 uTilt;
+    void main(){ float L=texture(uDye,vL).a, R=texture(uDye,vR).a, T=texture(uDye,vT).a, B=texture(uDye,vB).a, h=texture(uDye,vUv).a;
+      vec2 v=texture(uVel,vUv).xy - vec2(R-L,T-B)*.5*uS*min(h,2.)*smoothstep(.25,.8,h) + uTilt*min(h,2.)*h;
+      o=vec4(v,0.,1.); }`),
+  // 吹得快、又在顏色交界的地方長出泡沫
+  foam: program(`uniform sampler2D uAux, uVel, uDye; uniform float uRate, uDt;
+    vec3 col(vec2 uv){ vec4 d=texture(uDye,uv); return d.a>.02? d.rgb/d.a : vec3(0); }
+    void main(){ vec4 x=texture(uAux,vUv); float s=length(texture(uVel,vUv).xy); float a=texture(uDye,vUv).a;
+      float edge=smoothstep(.05,.35,length(col(vR)-col(vL))+length(col(vT)-col(vB)));
+      x.g=min(1.,x.g+uRate*uDt*smoothstep(15.,120.,s)*smoothstep(.05,.3,a)*edge); o=x; }`),
+  paint: program(NOISE + `uniform sampler2D uT; uniform int uMode, uShape; uniform vec2 uPoint, uBand; uniform vec3 uColor;
+    uniform float uR, uAspect, uAdd, uSeed, uCell, uFoam;
+    void main(){ vec4 b=texture(uT,vUv); float m;
+      if(uShape==0){ vec2 p=vUv-uPoint; p.x*=uAspect; float wob=(vnoise(p/uR*2.+uSeed)-.5)*.25*uR; m=1.-smoothstep(uR*.8,uR,length(p)+wob); }
+      else { float x=vUv.x*uAspect; float y=vUv.y+(vnoise(vec2(x*3.+uSeed,uSeed))-.5)*.05+sin(x*5.+uSeed)*.012;
+        m=smoothstep(uBand.x-.006,uBand.x+.006,y)*(1.-smoothstep(uBand.y-.006,uBand.y+.006,y)); }
+      if(m<=0.){ o=b; return; }
+      if(uMode==0){ float a=b.a; vec3 c=a>.02? b.rgb/a : uColor; c=mix(c,uColor,uFoam>.5 && a>.02 ? m*.45 : m); float na=min(a+m*uAdd,4.); o=vec4(c*na,na); }
+      else { float v=voro(vec2(vUv.x*uAspect,vUv.y)*uCell+uSeed*7.); o=vec4(mix(b.r,v,m),mix(b.g,uFoam,m),0.,1.); } }`),
+  display: program(`uniform sampler2D uDye, uAux; uniform vec3 uCanvas, uLace; uniform vec2 uTx;
+    uniform float uFoam, uCells, uRelief, uGloss;
+    float H(vec2 uv){ return min(texture(uDye,uv).a,3.)*.4; }
+    void main(){
+      vec4 d=texture(uDye,vUv); vec4 x=texture(uAux,vUv); float a=d.a; float pr=smoothstep(.06,.3,a);
+      vec3 c=mix(uCanvas, d.rgb/max(a,1e-3), pr);
+      vec2 e3=uTx*4.;
+      float mean=(texture(uAux,vUv+vec2(e3.x,0.)).r+texture(uAux,vUv-vec2(e3.x,0.)).r+texture(uAux,vUv+vec2(0.,e3.y)).r+texture(uAux,vUv-vec2(0.,e3.y)).r)*.25;
+      float rel=(x.r-mean)/(mean+.03);
+      float g=clamp(x.g*uFoam*1.4,0.,1.);
+      float lace=(1.-smoothstep(-.55+.35*g,-.15+.3*g,rel))*smoothstep(0.,.25,g)*pr;
+      float ring=(1.-smoothstep(-.4,.1,rel))*pr*uCells*smoothstep(.3,.05,x.r);
+      c*=1.-.3*ring*(1.-lace); c=mix(c,uLace,lace);
+      vec2 e=uTx*1.5;
+      vec2 sl=clamp(vec2(H(vUv-vec2(e.x,0.))-H(vUv+vec2(e.x,0.)), H(vUv-vec2(0.,e.y))-H(vUv+vec2(0.,e.y)))*uRelief/1.5,-1.2,1.2);
+      vec3 n=normalize(vec3(sl,1.));
+      vec3 L=normalize(vec3(-.6,.6,.5)); vec3 Hh=normalize(L+vec3(0,0,1));
+      float dif=dot(n,L)-L.z; float sp=pow(max(dot(n,Hh),0.),48.)*uGloss;
+      o=vec4(c*(1.+.7*dif)+sp,1.); }`),
+};
+
+const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,-1,1,1,1,1,-1]), gl.STATIC_DRAW);
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2,0,2,3]), gl.STATIC_DRAW);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.enableVertexAttribArray(0);
+
+function blit(t){
+  if(t){ gl.viewport(0, 0, t.w, t.h); gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo); }
+  else { gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight); gl.bindFramebuffer(gl.FRAMEBUFFER, null); }
+  gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+}
+function makeFBO(w, h, eight){
+  const tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, eight ? gl.RGBA8 : gl.RGBA16F, w, h, 0, gl.RGBA, eight ? gl.UNSIGNED_BYTE : gl.HALF_FLOAT, null);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  return {tex, fbo, w, h, tx:1/w, ty:1/h,
+    bind(i){ gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, tex); return i; },
+    free(){ gl.deleteTexture(tex); gl.deleteFramebuffer(fbo); }};
+}
+function makeDouble(w, h){
+  let a = makeFBO(w, h), b = makeFBO(w, h);
+  return {w, h, tx:1/w, ty:1/h, get read(){ return a; }, get write(){ return b; }, swap(){ [a, b] = [b, a]; }, free(){ a.free(); b.free(); }};
+}
+
+const QUALITY = {low:{sim:128, dye:640}, std:{sim:176, dye:1024}, high:{sim:240, dye:1536}};
+let vel, dye, aux, pres, divF, curlF, aspect = 1, simKey = '';
+function resolution(r){
+  let a = canvas.width / canvas.height; const inv = a < 1; if(inv) a = 1 / a;
+  const mn = Math.round(r), mx = Math.round(r * a);
+  return canvas.width > canvas.height ? {w:mx, h:mn} : {w:mn, h:mx};
+}
+function copyTo(src, dst, mode = 0, scale = [1,1,1,1]){
+  const u = P.copy.use();
+  gl.uniform2f(u.texelSize, src.tx, src.ty); gl.uniform1i(u.uT, src.bind(0));
+  gl.uniform1i(u.uMode, mode); gl.uniform4fv(u.uScale, scale); blit(dst);
+}
+function setTo(dst, v){ const u = P.set.use(); gl.uniform4fv(u.uValue, v); blit(dst); }
+function initSim(){
+  const q = QUALITY[S.quality] || QUALITY.std;
+  const sr = resolution(q.sim), dr = resolution(Math.min(q.dye, Math.max(canvas.width, canvas.height)));
+  const key = [sr.w, sr.h, dr.w, dr.h].join('x');
+  if(key === simKey) return;
+  simKey = key; aspect = canvas.width / canvas.height;
+  const old = dye ? {dye, aux} : null;
+  if(vel){ vel.free(); pres.free(); divF.free(); curlF.free(); }
+  vel = makeDouble(sr.w, sr.h); pres = makeDouble(sr.w, sr.h);
+  divF = makeFBO(sr.w, sr.h); curlF = makeFBO(sr.w, sr.h);
+  dye = makeDouble(dr.w, dr.h); aux = makeDouble(dr.w, dr.h);
+  setTo(aux.read, [1,0,0,1]);
+  if(old){ copyTo(old.dye.read, dye.read); copyTo(old.aux.read, aux.read); old.dye.free(); old.aux.free(); }
+  clearHistory();
+}
+function resize(){
+  const st = $('#stage'), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, Math.round(st.clientWidth * dpr)), h = Math.max(1, Math.round(st.clientHeight * dpr));
+  if(w !== canvas.width || h !== canvas.height){ canvas.width = w; canvas.height = h; }
+  initSim();
+}
+
+/* ---------- 歷史（復原） ---------- */
+const hist = []; const HMAX = 6;
+function clearHistory(){ while(hist.length){ const s = hist.pop(); s.d.free(); s.a.free(); } updateUndo(); }
+function snapshot(){
+  let s = hist.length >= HMAX ? hist.shift() : null;
+  if(!s) s = {d:makeFBO(dye.w, dye.h, true), a:makeFBO(dye.w, dye.h, true)};
+  copyTo(dye.read, s.d, 1); copyTo(aux.read, s.a, 0, [1,1,1,1]);
+  hist.push(s); updateUndo();
+}
+function undo(){
+  const s = hist.pop(); if(!s) return;
+  copyTo(s.d, dye.read, 2); copyTo(s.a, aux.read, 0, [1,1,1,1]);
+  setTo(vel.read, [0,0,0,1]); setTo(pres.read, [0,0,0,1]);
+  s.d.free(); s.a.free(); updateUndo();
+}
+function updateUndo(){ $('#bUndo').disabled = !hist.length; }
+function clearCanvas(){ setTo(dye.read, [0,0,0,0]); setTo(aux.read, [1,0,0,1]); setTo(vel.read, [0,0,0,1]); setTo(pres.read, [0,0,0,1]); }
+
+/* ---------- 繪製工具 ---------- */
+const hex2rgb = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+const lum = c => { const [r, g, b] = hex2rgb(c); return .3 * r + .59 * g + .11 * b; };
+function paint(o){
+  // o: {shape:0圓/1帶, x,y,r | y0,y1, color, add, seed, cell}
+  const rgb = hex2rgb(o.color), foam = lum(o.color) > .85 ? 1 : 0;
+  for(const [t, mode] of [[dye, 0], [aux, 1]]){
+    const u = P.paint.use();
+    gl.uniform2f(u.texelSize, t.tx, t.ty); gl.uniform1i(u.uT, t.read.bind(0));
+    gl.uniform1i(u.uMode, mode); gl.uniform1i(u.uShape, o.shape || 0);
+    gl.uniform2f(u.uPoint, o.x || 0, o.y || 0); gl.uniform2f(u.uBand, o.y0 || 0, o.y1 || 0);
+    gl.uniform3fv(u.uColor, rgb); gl.uniform1f(u.uR, o.r || .1); gl.uniform1f(u.uAspect, aspect);
+    gl.uniform1f(u.uAdd, o.add); gl.uniform1f(u.uSeed, o.seed); gl.uniform1f(u.uCell, o.cell); gl.uniform1f(u.uFoam, foam);
+    blit(t.write); t.swap();
+  }
+}
+function splatVel(x, y, fx, fy, r){
+  const u = P.splat.use();
+  gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uT, vel.read.bind(0));
+  gl.uniform2f(u.uPoint, x, y); gl.uniform2f(u.uForce, fx, fy); gl.uniform1f(u.uR, r); gl.uniform1f(u.uAspect, aspect);
+  blit(vel.write); vel.swap();
+}
+function radial(x, y, r, s){
+  const u = P.radial.use();
+  gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uT, vel.read.bind(0));
+  gl.uniform2f(u.uPoint, x, y); gl.uniform1f(u.uR, r); gl.uniform1f(u.uS, s); gl.uniform1f(u.uAspect, aspect);
+  blit(vel.write); vel.swap();
+}
+
+/* ---------- 模擬 ---------- */
+const pointers = new Map();
+let tilt = [0, 0], tilt0 = null;
+let DEAD = 1.5, THIN = .6;
+function step(dt){
+  gl.disable(gl.BLEND);
+  const R = state.size;
+  // 吹風：沿著拖曳方向的力（會產生漩渦）
+  for(const p of pointers.values()){
+    p.speed = Math.max(p.speed * .85, Math.hypot(p.dx, p.dy));
+    if(!(p.dx || p.dy)) continue;
+    const g = p.tool === 'blow' ? 2.2 * S.blow : 0.6;
+    splatVel(p.x, p.y, p.dx * vel.w * g, p.dy * vel.h * g, R * (p.tool === 'blow' ? 1.4 : 0.8));
+  }
+  let u = P.curl.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); blit(curlF);
+  u = P.vort.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1i(u.uCurl, curlF.bind(1));
+  gl.uniform1f(u.uCurlS, S.curl); gl.uniform1f(u.uDt, dt); blit(vel.write); vel.swap();
+  u = P.div.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); blit(divF);
+  copyTo(pres.read, pres.write, 0, [.8,.8,.8,1]); pres.swap();
+  u = P.pressure.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uDiv, divF.bind(0));
+  for(let i = 0; i < 20; i++){ gl.uniform1i(u.uP, pres.read.bind(1)); blit(pres.write); pres.swap(); }
+  u = P.grad.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uP, pres.read.bind(0)); gl.uniform1i(u.uVel, vel.read.bind(1));
+  blit(vel.write); vel.swap();
+  // 不可壓縮投影之後才加的力：顏料攤開、倒顏料往外推、吹風往外推、傾斜
+  u = P.spread.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1i(u.uDye, dye.read.bind(1));
+  gl.uniform1f(u.uS, S.spread); gl.uniform2f(u.uTilt, tilt[0] * 60, tilt[1] * 60); blit(vel.write); vel.swap();
+  for(const p of pointers.values()){
+    if(p.tool === 'pour') radial(p.x, p.y, R * 1.3, 18);
+    else radial(p.x, p.y, R * 1.2, 30 * S.blow * Math.max(0, 1 - p.speed * 80));
+  }
+  u = P.div.use(); gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); blit(divF);
+  // 平流
+  u = P.advect.use(); gl.uniform2f(u.uVelTx, vel.tx, vel.ty); gl.uniform1f(u.uDt, dt); gl.uniform1i(u.uDiv, divF.bind(2));
+  gl.uniform2f(u.texelSize, vel.tx, vel.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1i(u.uSrc, vel.read.bind(0));
+  gl.uniform1f(u.uDiss, S.viscosity); gl.uniform1f(u.uThin, 0); gl.uniform1f(u.uDead, 0); blit(vel.write); vel.swap();
+  gl.uniform2f(u.texelSize, dye.tx, dye.ty); gl.uniform1i(u.uVel, vel.read.bind(0)); gl.uniform1f(u.uDiss, 0); gl.uniform1f(u.uDead, DEAD);
+  gl.uniform1i(u.uSrc, dye.read.bind(1)); gl.uniform1f(u.uThin, THIN); blit(dye.write); dye.swap();
+  gl.uniform1i(u.uSrc, aux.read.bind(1)); gl.uniform1f(u.uThin, 0); blit(aux.write); aux.swap();
+  u = P.foam.use(); gl.uniform2f(u.texelSize, dye.tx * 2, dye.ty * 2); gl.uniform1i(u.uAux, aux.read.bind(0));
+  gl.uniform1i(u.uVel, vel.read.bind(1)); gl.uniform1i(u.uDye, dye.read.bind(2)); gl.uniform1f(u.uRate, 2.5); gl.uniform1f(u.uDt, dt);
+  blit(aux.write); aux.swap();
+  // 倒顏料
+  const now = performance.now();
+  for(const p of pointers.values()){
+    if(p.tool !== 'pour') continue;
+    if(state.sel < 0 && now - p.last > 800){ p.ci = nextColor(); p.last = now; p.seed = Math.random() * 100; }
+    paint({x:p.x, y:p.y, r:R, color:pal.colors[p.ci] || pal.colors[0], add:2.2 * dt, seed:p.seed, cell:p.cell});
+  }
+  for(const p of pointers.values()){ p.dx = p.dy = 0; }
+}
+function render(){
+  const u = P.display.use();
+  gl.uniform2f(u.texelSize, dye.tx, dye.ty); gl.uniform2f(u.uTx, dye.tx, dye.ty);
+  gl.uniform1i(u.uDye, dye.read.bind(0)); gl.uniform1i(u.uAux, aux.read.bind(1));
+  gl.uniform3fv(u.uCanvas, hex2rgb(pal.canvas)); gl.uniform3fv(u.uLace, hex2rgb(pal.lace));
+  gl.uniform1f(u.uFoam, S.foam); gl.uniform1f(u.uCells, S.cells); gl.uniform1f(u.uRelief, S.relief); gl.uniform1f(u.uGloss, S.gloss);
+  blit(null);
+}
+let lastT = 0;
+function frame(t){
+  const dt = Math.min(Math.max((t - lastT) / 1000, 1/240), 1/30); lastT = t;
+  resize(); step(dt); render();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- 構圖模板 ---------- */
+const rnd = (a, b) => a + Math.random() * (b - a);
+const sortedByLum = () => [...pal.colors].sort((a, b) => lum(a) - lum(b));
+const TEMPLATES = {
+  clear(){},
+  wave(){
+    const cols = sortedByLum().filter(c => lum(c) < .85);
+    const top = 1.02, bottom = .42, n = Math.max(cols.length, 1), hgt = (top - bottom) / n;
+    cols.forEach((c, i) => paint({shape:1, y0:top - (i + 1) * hgt - .01, y1:top - i * hgt + .05, color:c, add:1.1, seed:rnd(0, 99), cell:rnd(35, 70)}));
+    const light = cols[cols.length - 1] || pal.lace;
+    paint({shape:1, y0:bottom - .1, y1:bottom + .04, color:light, add:.9, seed:rnd(0, 99), cell:rnd(45, 80)});
+    paint({shape:1, y0:bottom - .1, y1:bottom + .01, color:pal.lace, add:.5, seed:rnd(0, 99), cell:rnd(45, 80)});
+    return '用「吹」從白色那排往上吹，就會出現浪花';
+  },
+  ring(){
+    let i = 0;
+    for(let r = .42; r > .02; r -= .035) paint({x:.5, y:.5, r, color:pal.colors[i++ % pal.colors.length], add:.35, seed:rnd(0, 99), cell:rnd(30, 70)});
+    return '等它自己攤開，或用「吹」從中間往外吹';
+  },
+  splash(){
+    for(let i = 0; i < 34; i++) paint({x:rnd(.05, .95), y:rnd(.05, .95), r:rnd(.04, .16), color:pal.colors[i % pal.colors.length], add:rnd(.6, 1.4), seed:rnd(0, 99), cell:rnd(30, 80)});
+    return '用「吹」拖曳，把顏色拉開混在一起';
+  },
+  stripe(){
+    const n = 14;
+    for(let i = 0; i < n; i++) paint({shape:1, y0:i / n - .01, y1:(i + 1) / n + .05, color:pal.colors[i % pal.colors.length], add:1, seed:rnd(0, 99), cell:rnd(40, 80)});
+    return '用「吹」橫向拖過去，會拉出大理石紋';
+  },
+  cells(){
+    const cols = sortedByLum();
+    paint({shape:1, y0:-.1, y1:1.1, color:cols[0], add:1, seed:rnd(0, 99), cell:30});
+    for(let i = 0; i < 60; i++) paint({x:rnd(0, 1), y:rnd(0, 1), r:rnd(.03, .09), color:cols[1 + i % Math.max(cols.length - 1, 1)] || cols[0], add:rnd(.3, .9), seed:rnd(0, 99), cell:rnd(50, 110)});
+    return '輕輕吹一下，細胞就會被拉開';
+  },
+};
+function applyTemplate(name){
+  snapshot(); clearCanvas();
+  const msg = TEMPLATES[name]();
+  if(msg){ setTool('blow'); showHint(msg); }
+}
+
+/* ---------- 介面 ---------- */
+function nextColor(){ const i = state.rot % pal.colors.length; state.rot++; return i; }
+function pickColor(){ return state.sel >= 0 && state.sel < pal.colors.length ? state.sel : nextColor(); }
+function setTool(t){ state.tool = t; $$('.tool').forEach(b => b.classList.toggle('on', b.dataset.tool === t)); }
+function savePal(){ store.set('palette', pal); }
+function renderSwatches(){
+  const sw = $('#sw'); sw.innerHTML = '';
+  const rot = document.createElement('button'); rot.className = 'sw rot' + (state.sel < 0 ? ' on' : ''); rot.title = '輪流換色（按住會一圈圈換色）';
+  rot.onclick = () => { state.sel = -1; setTool('pour'); renderSwatches(); }; sw.appendChild(rot);
+  pal.colors.forEach((c, i) => {
+    const b = document.createElement('button'); b.className = 'sw' + (state.sel === i ? ' on' : ''); b.style.background = c;
+    b.onclick = () => { state.sel = i; setTool('pour'); renderSwatches(); }; sw.appendChild(b);
+  });
+}
+function renderPalSheet(){
+  const cc = $('#curCols'); cc.innerHTML = '';
+  pal.colors.forEach((c, i) => {
+    const chip = document.createElement('div'); chip.className = 'chip';
+    chip.innerHTML = `<label style="background:${c}"><input type="color" value="${c}"></label>` + (pal.colors.length > 2 ? '<button class="del" aria-label="刪除">×</button>' : '');
+    const inp = chip.querySelector('input');
+    inp.oninput = () => { pal.colors[i] = inp.value; chip.querySelector('label').style.background = inp.value; savePal(); renderSwatches(); };
+    const del = chip.querySelector('.del');
+    if(del) del.onclick = () => { pal.colors.splice(i, 1); if(state.sel >= pal.colors.length) state.sel = -1; savePal(); renderPalSheet(); renderSwatches(); };
+    cc.appendChild(chip);
+  });
+  if(pal.colors.length < 10){
+    const add = document.createElement('button'); add.className = 'add'; add.textContent = '+'; add.setAttribute('aria-label', '新增顏色');
+    add.onclick = () => { pal.colors.push('#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')); savePal(); renderPalSheet(); renderSwatches(); };
+    cc.appendChild(add);
+  }
+  for(const [id, k] of [['canvas', 'canvas'], ['lace', 'lace']]){
+    const inp = $('#' + id + 'Col'); inp.value = pal[k]; $('#' + id + 'Lbl').style.background = pal[k];
+    inp.oninput = () => { pal[k] = inp.value; $('#' + id + 'Lbl').style.background = inp.value; savePal(); };
+  }
+  const tl = $('#tplList'); tl.innerHTML = '';
+  PALETTES.forEach(p => {
+    const b = document.createElement('button'); b.className = 'tpl' + (p.name === pal.name ? ' on' : '');
+    b.innerHTML = `<span>${p.name}</span><div class="bars">${[p.canvas, ...p.colors].map(c => `<i style="background:${c}"></i>`).join('')}</div>`;
+    b.onclick = () => { pal = JSON.parse(JSON.stringify(p)); state.sel = -1; savePal(); renderPalSheet(); renderSwatches(); };
+    tl.appendChild(b);
+  });
+}
+function openSheet(id){ $$('.sheet').forEach(s => s.hidden = s.id !== id); if(id === 'palSheet') renderPalSheet(); }
+$$('[data-close]').forEach(b => b.onclick = () => b.closest('.sheet').hidden = true);
+$('#bTpl').onclick = () => openSheet('tplSheet');
+$('#bPal').onclick = () => openSheet('palSheet');
+$('#bSet').onclick = () => openSheet('setSheet');
+$('#bUndo').onclick = undo;
+$$('[data-tpl]').forEach(b => b.onclick = () => { applyTemplate(b.dataset.tpl); $('#tplSheet').hidden = true; });
+$$('.tool').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+const sizeEl = $('#size'); sizeEl.value = state.size;
+sizeEl.oninput = () => { state.size = +sizeEl.value; store.set('size', state.size); };
+
+// 設定
+function applyLayout(){
+  const pc = S.layout === 'pc' || (S.layout === 'auto' && matchMedia('(pointer:fine)').matches && innerWidth >= 800);
+  document.body.classList.toggle('pc', pc);
+}
+function syncSettings(){ $$('#setSheet [data-k]').forEach(el => el.value = S[el.dataset.k]); }
+$$('#setSheet [data-k]').forEach(el => {
+  el.addEventListener('input', () => {
+    const k = el.dataset.k; S[k] = el.type === 'range' ? +el.value : el.value; store.set('settings', S);
+    if(k === 'layout') applyLayout();
+    if(k === 'quality') initSim();
+    if(k === 'tilt') setTilt(S.tilt === 'on');
+  });
+});
+$('#resetSet').onclick = () => { Object.assign(S, DEF); store.set('settings', S); syncSettings(); applyLayout(); initSim(); setTilt(false); };
+addEventListener('resize', applyLayout);
+
+// 傾斜手機
+function onOrient(e){
+  if(e.beta == null) return;
+  if(!tilt0) tilt0 = [e.gamma, e.beta];
+  const cl = v => Math.max(-1, Math.min(1, v));
+  tilt = [cl((e.gamma - tilt0[0]) / 30), cl(-(e.beta - tilt0[1]) / 30)];
+}
+async function setTilt(on){
+  removeEventListener('deviceorientation', onOrient); tilt = [0, 0]; tilt0 = null;
+  if(!on) return;
+  try{
+    if(typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission){
+      if(await DeviceOrientationEvent.requestPermission() !== 'granted') throw 0;
+    }
+    addEventListener('deviceorientation', onOrient);
+    showHint('以現在的角度為水平，傾斜手機顏料就會往低處流');
+  }catch(e){ S.tilt = 'off'; store.set('settings', S); syncSettings(); showHint('沒有取得傾斜感應器的權限'); }
+}
+
+// 存圖
+$('#bSave').onclick = () => {
+  render();
+  canvas.toBlob(async blob => {
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    const name = `流動畫-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.png`;
+    const file = new File([blob], name, {type:'image/png'});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && matchMedia('(pointer:coarse)').matches){
+      try{ await navigator.share({files:[file], title:'流動畫'}); return; }catch(e){ if(e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, 'image/png');
+};
+
+// 提示
+let hintTimer;
+function showHint(msg){
+  const h = $('#hint'); h.textContent = msg; h.hidden = false; h.style.opacity = 1;
+  clearTimeout(hintTimer); hintTimer = setTimeout(() => { h.style.opacity = 0; setTimeout(() => h.hidden = true, 700); }, 4500);
+}
+
+// 指標
+function pos(e){ const r = canvas.getBoundingClientRect(); return {x:(e.clientX - r.left) / r.width, y:1 - (e.clientY - r.top) / r.height}; }
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+  $$('.sheet').forEach(s => s.hidden = true);
+  if(pointers.size === 0) snapshot();
+  const p = pos(e), tool = e.button === 2 ? 'blow' : state.tool;
+  pointers.set(e.pointerId, {x:p.x, y:p.y, dx:0, dy:0, speed:0, tool, ci:tool === 'pour' ? pickColor() : 0,
+    last:performance.now(), seed:Math.random() * 100, cell:rnd(30, 80)});
+});
+canvas.addEventListener('pointermove', e => {
+  const p = pointers.get(e.pointerId); if(!p) return;
+  const q = pos(e); p.dx += q.x - p.x; p.dy += q.y - p.y; p.x = q.x; p.y = q.y;
+});
+const up = e => pointers.delete(e.pointerId);
+canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', up);
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('wheel', e => {
+  e.preventDefault(); state.size = Math.max(.02, Math.min(.25, state.size * (e.deltaY > 0 ? .9 : 1.1)));
+  sizeEl.value = state.size; store.set('size', state.size);
+}, {passive:false});
+addEventListener('keydown', e => {
+  if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){ e.preventDefault(); undo(); }
+  else if(e.key === 'p' || e.key === 'P') setTool('pour');
+  else if(e.key === 'b' || e.key === 'B') setTool('blow');
+});
+
+/* ---------- 開始 ---------- */
+applyLayout(); syncSettings(); renderSwatches();
+resize();
+TEMPLATES.wave(); setTool('blow');
+showHint('先試試看：用「吹」從白色那排往上拖，吹出浪花');
+requestAnimationFrame(t => { lastT = t; requestAnimationFrame(frame); });
+if(S.tilt === 'on') { S.tilt = 'off'; syncSettings(); }
+</script>
+</body>
+</html>

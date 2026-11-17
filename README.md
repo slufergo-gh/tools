@@ -4,3 +4,4 @@
 
 - `voice-note/` 行車語音筆記
 - `remote-camera/` 遙控相機
+- `fluid-art/` 流動畫（GPU 流體模擬，倒顏料＋吹風）
