@@ -27,6 +27,19 @@ header button{padding:9px 12px;font-size:15px;white-space:nowrap}
 #pwList div span{flex:1;letter-spacing:.1em}
 #pwList button{padding:6px 12px;font-size:14px}
 #pwList p{margin:0;font-size:14px;color:var(--muted)}
+#orig{flex:1;overflow-y:auto;padding:12px 12px 30vh;-webkit-overflow-scrolling:touch}
+#orig .pimg{position:relative;margin:0 auto 14px;max-width:900px;cursor:pointer}
+#orig .pimg div{font-size:13px;color:var(--muted);margin:0 2px 4px}
+#orig .pimg canvas{display:block;width:100%;background:#fff;border-radius:4px;outline:3px solid transparent;outline-offset:2px}
+#orig .pimg.cur canvas{outline-color:var(--hl)}
+#orig .paper{background:#fff;color:#111;max-width:900px;margin:0 auto;padding:22px 20px;border-radius:6px;font-size:16px;line-height:1.6;font-family:"PingFang TC","Noto Sans TC",serif}
+#orig .paper img{max-width:100%;height:auto}
+#orig .paper table{border-collapse:collapse;width:100%;margin:.6em 0}
+#orig .paper td,#orig .paper th{border:1px solid #999;padding:4px 6px;vertical-align:top}
+#orig .paper p,#orig .paper li{margin:.4em 0}
+#orig .paper .cur{background:#ffe58a}
+#orig .paper hr.pb{border:0;border-top:2px dashed #bbb;margin:1.4em -20px}
+#pageGrid canvas{width:100%;background:#fff;border-radius:3px;margin-bottom:4px}
 #text h4.pg{margin:1.4em 0 .6em;font-size:14px;font-weight:600;color:var(--muted);border-top:1px solid var(--line);padding-top:.6em;cursor:pointer}
 #text h4.pg:first-child{margin-top:0}
 #pageGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:55vh;overflow-y:auto}
@@ -66,10 +79,12 @@ dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
 <header>
   <div class="name" id="name">文件朗讀</div>
   <button id="pageBtn" hidden>頁</button>
+  <button id="viewBtn" hidden>原稿</button>
   <button id="openBtn">開啟</button>
   <button id="setBtn" aria-label="設定">設定</button>
 </header>
 <div id="text"></div>
+<div id="orig" hidden></div>
 <div id="bar">
   <div class="prog"><span id="pos">0 / 0</span><input type="range" id="seek" min="0" max="0" value="0"><span id="pct">0%</span></div>
   <div class="ctrl">
@@ -138,6 +153,8 @@ let doc=null;          // {name, paras:[[sentence,...],...]}
 let flat=[];           // [{p,s,text}]
 let idx=0, playing=false, token=0, wakeLock=null;
 let onlyPage=LS.get('ra_onlypage',false);
+let orig=null;        // {type:'pdf'|'docx', buf, pw}
+let pdfDoc=null, viewMode='text';
 let rate=LS.get('ra_rate',1.0), voiceURI=LS.get('ra_voice',''), fontSize=LS.get('ra_font',20);
 
 function toast(m,ms=2500){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',ms)}
@@ -216,6 +233,7 @@ function render(){
   highlight(true);updateBar();
 }
 function highlight(scroll){
+  markOrig(scroll);
   const box=$('text');
   const old=box.querySelector('s.cur');if(old)old.classList.remove('cur');
   const el=box.querySelector('s[data-i="'+idx+'"]');
@@ -274,7 +292,11 @@ document.addEventListener('visibilitychange',()=>{
 
 /* ---------- 讀檔 ---------- */
 function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>no(new Error('載入失敗，請檢查網路'));document.head.appendChild(s)})}
+async function loadPdfLib(){
+  if(!window.pdfjsLib){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
+}
 async function readPdf(buf){
+  readPdf.pw=null;
   if(!window.pdfjsLib){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
   const task=pdfjsLib.getDocument({data:buf,cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',cMapPacked:true,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'});
   const queue=savedPw();let used=null,typed=false;
@@ -283,7 +305,7 @@ async function readPdf(buf){
     askPassword.keep=null;
     askPassword(reason===2&&typed).then(pw=>{if(pw==null){task.destroy()}else{used=pw;typed=true;update(pw)}})};
   let pdf;
-  try{pdf=await task.promise;if(used&&(!typed||askPassword.keep===used))rememberPw(used)}catch(e){if(e&&e.name==='PasswordException'||/destroy|password/i.test(e&&e.message||''))throw new Error('已取消（需要密碼）');throw e}
+  try{pdf=await task.promise;if(used&&(!typed||askPassword.keep===used))rememberPw(used);pdfDoc=pdf;readPdf.pw=used}catch(e){if(e&&e.name==='PasswordException'||/destroy|password/i.test(e&&e.message||''))throw new Error('已取消（需要密碼）');throw e}
   let out='';
   for(let i=1;i<=pdf.numPages;i++){
     toast('讀取第 '+i+' / '+pdf.numPages+' 頁…',60000);
@@ -422,19 +444,105 @@ async function openFile(f){
     toast('讀取中…',60000);
     const buf=await f.arrayBuffer();
     const head=new Uint8Array(buf.slice(0,4));
-    let text;
-    if(ext==='pdf'||(head[0]===0x25&&head[1]===0x50))text=await readPdf(buf);
+    let text,o=null;
+    if(ext==='pdf'||(head[0]===0x25&&head[1]===0x50)){const copy=buf.slice(0);text=await readPdf(buf);o={type:'pdf',buf:copy,pw:readPdf.pw}}
     else if(head[0]===0xD0&&head[1]===0xCF&&ext!=='txt'){
       const plain=await unlockOffice(buf);if(!plain)return;
-      text=await readDocx(plain);
+      text=await readDocx(plain);o={type:'docx',buf:plain};
     }
-    else if(ext==='docx'||(head[0]===0x50&&head[1]===0x4b))text=await readDocx(buf);
+    else if(ext==='docx'||(head[0]===0x50&&head[1]===0x4b)){text=await readDocx(buf);o={type:'docx',buf}}
     else if(ext==='doc'){toast('舊版 .doc 不支援，請先另存成 .docx 或 PDF',4000);return}
     else{text=decodeText(buf);if(/^(html?)$/.test(ext))text=new DOMParser().parseFromString(text,'text/html').body.innerText}
     $('toast').style.display='none';
+    const keepPdf=o&&o.type==='pdf'?pdfDoc:null;
     setDoc(name,text,false);
+    setOrig(o,keepPdf);
   }catch(e){console.error(e);toast(/^已取消/.test(e.message||'')?'已取消':'打不開這個檔案：'+(e.message||e),4000)}
 }
+
+/* ---------- 原稿檢視（PDF 頁面圖、Word 排版）---------- */
+const IDB={db:null,
+  open(){return this.db||(this.db=new Promise((ok,no)=>{const r=indexedDB.open('readAloud',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)}))},
+  async put(v){try{const d=await this.open();d.transaction('f','readwrite').objectStore('f').put(v,'orig')}catch(e){}},
+  async get(){try{const d=await this.open();return await new Promise(ok=>{const r=d.transaction('f').objectStore('f').get('orig');r.onsuccess=()=>ok(r.result);r.onerror=()=>ok(null)})}catch(e){return null}},
+  async del(){try{const d=await this.open();d.transaction('f','readwrite').objectStore('f').delete('orig')}catch(e){}}};
+function setOrig(o,pdf){
+  orig=o;pdfDoc=pdf||null;
+  if(o)IDB.put({name:doc&&doc.name,type:o.type,buf:o.buf,pw:o.pw||null});else IDB.del();
+  setView('text');
+}
+async function getPdf(){
+  if(pdfDoc)return pdfDoc;
+  await loadPdfLib();
+  pdfDoc=await pdfjsLib.getDocument({data:orig.buf.slice(0),password:orig.pw||undefined,cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',cMapPacked:true,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'}).promise;
+  return pdfDoc;
+}
+async function drawPage(canvas,n,cssW){
+  const pdf=await getPdf(),page=await pdf.getPage(n);
+  const v1=page.getViewport({scale:1}),dpr=Math.min(2,window.devicePixelRatio||1);
+  const vp=page.getViewport({scale:cssW*dpr/v1.width});
+  canvas.width=Math.round(vp.width);canvas.height=Math.round(vp.height);canvas.style.aspectRatio=vp.width+'/'+vp.height;
+  await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+}
+function lazyDraw(root,canvases,w){
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting&&!e.target.dataset.done){e.target.dataset.done=1;io.unobserve(e.target);drawPage(e.target,+e.target.dataset.n,w()).catch(err=>console.error(err))}}),{root,rootMargin:'600px 0px'});
+  canvases.forEach(c=>io.observe(c));
+}
+async function renderOrig(){
+  const box=$('orig');box.innerHTML='';
+  if(!orig)return;
+  if(orig.type==='pdf'){
+    toast('載入原稿…',60000);
+    let pdf;try{pdf=await getPdf()}catch(e){toast('原稿打不開：'+(e.message||e),4000);return}
+    $('toast').style.display='none';
+    const p1=(await pdf.getPage(1)).getViewport({scale:1}),ratio=p1.height/p1.width;
+    const cvs=[];
+    for(let n=1;n<=pdf.numPages;n++){
+      const d=document.createElement('div');d.className='pimg';d.dataset.page=n;
+      const h=document.createElement('div');h.textContent='第 '+n+' 頁';
+      const c=document.createElement('canvas');c.dataset.n=n;c.style.aspectRatio=(1/ratio).toString();
+      d.append(h,c);box.appendChild(d);cvs.push(c);
+      d.onclick=()=>{const i=pageStart(n);if(i>=0&&flat[i].pg===n)startAt(i);else toast('這一頁沒有文字可以唸')};
+    }
+    lazyDraw(box,cvs,()=>Math.min(900,box.clientWidth-24));
+  }else{
+    toast('載入原稿…',60000);
+    try{
+      if(!window.mammoth)await loadScript('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js');
+      const r=await mammoth.convertToHtml({arrayBuffer:orig.buf.slice(0)});
+      const paper=document.createElement('div');paper.className='paper';paper.innerHTML=r.value;box.appendChild(paper);
+      paper.onclick=e=>{const el=e.target.closest('p,li,td,h1,h2,h3,h4,h5,h6');if(!el)return;
+        const key=el.textContent.replace(/\s+/g,'').slice(0,12);if(!key)return;
+        const i=flat.findIndex(f=>f.text.replace(/\s+/g,'').includes(key)||key.includes(f.text.replace(/\s+/g,'').slice(0,12)));
+        if(i>=0)startAt(i)};
+      $('toast').style.display='none';
+    }catch(e){toast('原稿打不開：'+(e.message||e),4000)}
+  }
+  markOrig(true);
+}
+function markOrig(scroll){
+  if(viewMode!=='orig'||!orig||!flat[idx])return;
+  const box=$('orig');
+  if(orig.type==='pdf'){
+    const pg=flat[idx].pg,old=box.querySelector('.pimg.cur');
+    if(old&&+old.dataset.page===pg)return;
+    if(old)old.classList.remove('cur');
+    const el=box.querySelector('.pimg[data-page="'+pg+'"]');
+    if(el){el.classList.add('cur');if(scroll)el.scrollIntoView({block:'start',behavior:old?'smooth':'auto'})}
+  }else{
+    const old=box.querySelector('.paper .cur');if(old)old.classList.remove('cur');
+    const key=flat[idx].text.replace(/\s+/g,'').slice(0,10);if(!key)return;
+    const el=[...box.querySelectorAll('.paper p,.paper li,.paper td,.paper h1,.paper h2,.paper h3,.paper h4')].find(x=>x.textContent.replace(/\s+/g,'').includes(key));
+    if(el){el.classList.add('cur');if(scroll){const r=el.getBoundingClientRect(),b=box.getBoundingClientRect();if(r.top<b.top||r.bottom>b.top+b.height*0.6)el.scrollIntoView({block:'center',behavior:'smooth'})}}
+  }
+}
+function setView(m){
+  viewMode=orig?m:'text';
+  $('text').hidden=viewMode!=='text';$('orig').hidden=viewMode!=='orig';
+  $('viewBtn').hidden=!orig;$('viewBtn').textContent=viewMode==='orig'?'文字':'原稿';
+  if(viewMode==='orig')renderOrig();else{$('orig').innerHTML='';highlight(true)}
+}
+$('viewBtn').onclick=()=>setView(viewMode==='orig'?'text':'orig');
 
 /* ---------- 對話框 ---------- */
 function savedPw(){return LS.get('ra_pw',[])}
@@ -464,12 +572,12 @@ $('delBtn').onclick=()=>{const b=$('delBtn');
   if(!b.dataset.arm){b.dataset.arm='1';b.textContent='再按一次確認刪除';return}
   stop();const m=LS.get('ra_pos',{});const pre=doc.name+'|';Object.keys(m).forEach(k=>{if(k.startsWith(pre))delete m[k]});LS.set('ra_pos',m);
   try{localStorage.removeItem('ra_doc')}catch(e){}
-  doc=null;flat=[];idx=0;$('openDlg').close();render();toast('已從這支手機刪除（原始檔案不受影響）',3500)};
+  doc=null;setOrig(null);flat=[];idx=0;$('openDlg').close();render();toast('已從這支手機刪除（原始檔案不受影響）',3500)};
 $('pickFile').onclick=()=>{$('openDlg').close();$('file').click()};
 $('pasteBtn').onclick=openPaste;
 $('pasteCancel').onclick=()=>$('pasteDlg').close();
 $('pasteOk').onclick=()=>{const t=$('pasteTxt').value;if(!t.trim())return;$('pasteDlg').close();
-  const first=t.trim().split('\n')[0].slice(0,20);setDoc('貼上：'+first,t,false)};
+  const first=t.trim().split('\n')[0].slice(0,20);setDoc('貼上：'+first,t,false);setOrig(null)};
 $('file').onchange=e=>{openFile(e.target.files[0]);e.target.value=''};
 
 function fillVoices(){
@@ -509,7 +617,9 @@ $('pageBtn').onclick=()=>{
   flat.forEach((f,i)=>{if(seen.has(f.pg))return;seen.add(f.pg);
     const b=document.createElement('button');if(f.pg===cur)b.className='on';
     const t=document.createElement('b');t.textContent='第 '+f.pg+' 頁';const sn=document.createElement('span');sn.textContent=f.text.slice(0,24);
+    if(orig&&orig.type==='pdf'){const c=document.createElement('canvas');c.dataset.n=f.pg;c.style.aspectRatio='0.72';b.appendChild(c)}
     b.append(t,sn);b.onclick=()=>{$('pageDlg').close();startAt(i)};g.appendChild(b)});
+  if(orig&&orig.type==='pdf')lazyDraw(g,[...g.querySelectorAll('canvas')],()=>160);
   syncAfter();$('pageDlg').showModal();
   const on=g.querySelector('.on');if(on)on.scrollIntoView({block:'center'})};
 function syncAfter(){document.querySelectorAll('.afterPage').forEach(x=>x.value=onlyPage?'stop':'next')}
@@ -518,7 +628,9 @@ $('pageClose').onclick=()=>$('pageDlg').close();
 
 if(!synth){toast('這個瀏覽器不支援朗讀',5000)}
 const saved=LS.get('ra_doc',null);
-if(saved&&saved.text){setDoc(saved.name,saved.text,true)}else render();
+if(saved&&saved.text){setDoc(saved.name,saved.text,true);
+  IDB.get().then(r=>{if(r&&r.buf&&doc&&r.name===doc.name){orig={type:r.type,buf:r.buf,pw:r.pw};setView('text')}})}
+else render();
 </script>
 </body>
 </html>
