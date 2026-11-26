@@ -23,6 +23,10 @@ header button{padding:9px 12px;font-size:15px;white-space:nowrap}
 #text p{margin:0 0 .8em}
 #text s{text-decoration:none;border-radius:4px;cursor:pointer}
 #text s.cur{background:var(--hl);color:#111}
+#pwList div{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:16px}
+#pwList div span{flex:1;letter-spacing:.1em}
+#pwList button{padding:6px 12px;font-size:14px}
+#pwList p{margin:0;font-size:14px;color:var(--muted)}
 .empty{color:var(--muted);font-size:17px;line-height:1.7;padding-top:8vh;text-align:center}
 .empty b{display:block;color:var(--fg);font-size:22px;margin-bottom:12px}
 .empty .big{margin-top:24px;padding:18px 28px;font-size:20px;background:var(--accent);border-color:var(--accent);color:#fff}
@@ -89,6 +93,9 @@ dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
   <h3>設定</h3>
   <label for="voice">聲音</label>
   <select id="voice"></select>
+  <label>記住的密碼（開有密碼的檔案時自動先試）</label>
+  <div id="pwList"></div>
+  <div style="display:flex;gap:8px;margin-top:8px"><input id="pwAdd" type="password" autocomplete="off" placeholder="新增密碼" style="flex:1;min-width:0;font:inherit;font-size:16px;padding:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px"><button id="pwAddBtn" style="padding:10px 16px">新增</button></div>
   <label for="font">字體大小</label>
   <select id="font"><option value="17">小</option><option value="20">中</option><option value="24">大</option><option value="28">特大</option></select>
   <p class="note">朗讀時螢幕會保持亮著；鎖螢幕或切到別的 App，朗讀會停，回來按播放即可從原處繼續。<br>想要更自然的聲音：iPhone 設定 → 輔助使用 → 朗讀內容 → 聲音 → 中文（台灣），下載「增強版」或「高品質」聲音，再回這裡選。</p>
@@ -97,7 +104,8 @@ dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
 <dialog id="pwDlg">
   <h3 id="pwMsg">這份 PDF 有設密碼</h3>
   <input id="pwIn" type="password" autocomplete="off" placeholder="輸入密碼" style="width:100%;font:inherit;font-size:18px;padding:12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px">
-  <p class="note">密碼只用來在這支手機上打開檔案，不會儲存或傳出去。</p>
+  <label style="display:flex;gap:8px;align-items:center;font-size:15px;color:var(--fg);margin-top:12px"><input type="checkbox" id="pwRem" checked style="width:20px;height:20px">記住這個密碼，下次自動試</label>
+  <p class="note">密碼只存在這支手機上，不會傳出去；可在「設定」刪除。</p>
   <div class="row"><button id="pwCancel">取消</button><button class="ok" id="pwOk">打開</button></div>
 </dialog>
 <div id="toast"></div>
@@ -240,9 +248,13 @@ function loadScript(src){return new Promise((ok,no)=>{const s=document.createEle
 async function readPdf(buf){
   if(!window.pdfjsLib){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
   const task=pdfjsLib.getDocument({data:buf,cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',cMapPacked:true,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'});
-  task.onPassword=(update,reason)=>askPassword(reason===2).then(pw=>{if(pw==null){task.destroy();}else update(pw)});
+  const queue=savedPw();let used=null,typed=false;
+  task.onPassword=(update,reason)=>{
+    if(queue.length){used=queue.shift();typed=false;update(used);return}
+    askPassword.keep=null;
+    askPassword(reason===2&&typed).then(pw=>{if(pw==null){task.destroy()}else{used=pw;typed=true;update(pw)}})};
   let pdf;
-  try{pdf=await task.promise}catch(e){if(e&&e.name==='PasswordException'||/destroy|password/i.test(e&&e.message||''))throw new Error('已取消（需要密碼）');throw e}
+  try{pdf=await task.promise;if(used&&(!typed||askPassword.keep===used))rememberPw(used)}catch(e){if(e&&e.name==='PasswordException'||/destroy|password/i.test(e&&e.message||''))throw new Error('已取消（需要密碼）');throw e}
   let out='';
   for(let i=1;i<=pdf.numPages;i++){
     toast('讀取第 '+i+' / '+pdf.numPages+' 頁…',60000);
@@ -351,17 +363,18 @@ async function unlockOffice(buf){
   if(!ei||!ep){toast(OLD_DOC,5000);return null}
   const info=Uint8Array.from(ei.content),pkg=Uint8Array.from(ep.content);
   const ver=info[0]+'.'+info[2];
-  let wrong=false;
+  let wrong=false;const queue=savedPw();
   for(;;){
-    const pw=await askPassword(wrong,'Word');
-    if(pw==null){toast('已取消');return null}
+    let pw,fromSaved=false;
+    if(queue.length){pw=queue.shift();fromSaved=true}
+    else{askPassword.keep=null;pw=await askPassword(wrong,'Word');if(pw==null){toast('已取消');return null}}
     toast('解鎖中…',60000);
     let out;
     if(ver==='4.4')out=await decryptAgile(info,pkg,pw);
     else if(info[2]===2)out=await decryptStandard(info,pkg,pw);
     else{toast('這種加密方式不支援，請在 Word 移除密碼或另存成 PDF',6000);return null}
-    if(out&&isZip(out))return out.buffer;
-    wrong=true;
+    if(out&&isZip(out)){if(fromSaved||askPassword.keep===pw)rememberPw(pw);return out.buffer}
+    if(!fromSaved)wrong=true;
   }
 }
 function decodeText(buf){
@@ -393,10 +406,22 @@ async function openFile(f){
 }
 
 /* ---------- 對話框 ---------- */
+function savedPw(){return LS.get('ra_pw',[])}
+function rememberPw(pw){if(!pw)return;const l=savedPw().filter(x=>x!==pw);l.unshift(pw);LS.set('ra_pw',l.slice(0,8))}
+function forgetPw(pw){LS.set('ra_pw',savedPw().filter(x=>x!==pw))}
+function maskPw(pw){return pw.length<=2?'••••':'••••'+pw.slice(-2)}
+function renderPwList(){
+  const box=$('pwList'),l=savedPw();box.innerHTML='';
+  if(!l.length){box.innerHTML='<p>還沒有記住的密碼</p>';return}
+  l.forEach(pw=>{const d=document.createElement('div');const sp=document.createElement('span');sp.textContent=maskPw(pw);
+    const sh=document.createElement('button');sh.textContent='顯示';sh.onclick=()=>{const on=sp.textContent===pw;sp.textContent=on?maskPw(pw):pw;sh.textContent=on?'顯示':'隱藏'};
+    const del=document.createElement('button');del.textContent='刪除';del.onclick=()=>{forgetPw(pw);renderPwList()};
+    d.append(sp,sh,del);box.appendChild(d)});
+}
 function askPassword(wrong,kind='PDF'){
   return new Promise(ok=>{const d=$('pwDlg');$('pwMsg').textContent=wrong?'密碼不對，請再試一次':'這份 '+kind+' 有設密碼';$('pwIn').value='';
     $('toast').style.display='none';
-    $('pwOk').onclick=()=>{d.close();ok($('pwIn').value)};$('pwCancel').onclick=()=>{d.close();ok(null)};
+    $('pwOk').onclick=()=>{d.close();const v=$('pwIn').value;if($('pwRem').checked)askPassword.keep=v;ok(v)};$('pwCancel').onclick=()=>{d.close();ok(null)};
     $('pwIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('pwOk').click()}};
     d.showModal();setTimeout(()=>$('pwIn').focus(),50)})}
 function openPaste(){$('openDlg').close();$('pasteTxt').value='';$('pasteDlg').showModal()}
@@ -418,7 +443,8 @@ function fillVoices(){
   [...zh,...other].forEach(v=>{const o=document.createElement('option');o.value=v.voiceURI;o.textContent=label(v);if(cur&&v.voiceURI===cur.voiceURI)o.selected=true;sel.appendChild(o)});
   if(!vs.length)sel.innerHTML='<option>使用預設聲音</option>';
 }
-$('setBtn').onclick=()=>{fillVoices();$('font').value=String(fontSize);$('setDlg').showModal()};
+$('pwAddBtn').onclick=()=>{const v=$('pwAdd').value;if(!v)return;rememberPw(v);$('pwAdd').value='';renderPwList();toast('已記住')};
+$('setBtn').onclick=()=>{fillVoices();renderPwList();$('font').value=String(fontSize);$('setDlg').showModal()};
 $('setClose').onclick=()=>$('setDlg').close();
 $('voice').onchange=e=>{voiceURI=e.target.value;LS.set('ra_voice',voiceURI);
   if(playing){token++;synth.cancel();setTimeout(speakCurrent,60)}
