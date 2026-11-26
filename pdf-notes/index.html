@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1418">
+<title>PDF 註解整理</title>
+<style>
+:root{--bg:#0f1418;--panel:#182027;--line:#26313a;--fg:#e9eef2;--muted:#8a99a6;--accent:#2f80ed;--num:#e8590c;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  padding:calc(20px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+main{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:22px;margin:0}
+a.back{color:var(--muted);text-decoration:none;font-size:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+#drop{border:2px dashed var(--line);text-align:center;padding:32px 16px;cursor:pointer;color:var(--muted)}
+#drop.over{border-color:var(--accent);color:var(--fg)}
+#drop b{display:block;color:var(--fg);font-size:18px;margin-bottom:6px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px 20px}
+.opt{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
+.opt select,.opt input[type=number]{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:15px}
+.opt input[type=range]{width:100%}
+.check{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
+.check input{width:18px;height:18px;flex:none}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{background:var(--accent);color:#fff;border:0;border-radius:12px;padding:13px 20px;font-size:16px;font-weight:600;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg);font-weight:400;padding:9px 14px;font-size:14px}
+#status{font-size:14px;color:var(--muted)}
+.hint{font-size:13px;color:var(--muted);margin:0}
+#list{display:flex;flex-direction:column;gap:14px}
+.fhead{font-size:15px;font-weight:700;margin:6px 0 -4px}
+.card{display:grid;grid-template-columns:minmax(0,260px) 1fr;gap:14px;align-items:start;border-top:1px solid var(--line);padding-top:14px}
+.card.off{opacity:.35}
+.card img{width:100%;display:block;border-radius:6px;background:#fff}
+.card .pn{font-size:13px;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;gap:8px}
+.card .pn label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.card ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:14px;line-height:1.5}
+.card li{display:flex;gap:6px}
+.card li>b{color:var(--num);flex:none;min-width:1.4em}
+.q{border-radius:3px;padding:0 2px;color:#111}
+.rep{color:var(--muted);margin-top:2px}
+.meta{color:var(--muted);font-size:12px}
+.none{color:var(--muted);font-size:13px}
+@media (max-width:560px){.card{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="../">‹ 我的工具</a>
+  <h1>PDF 註解整理</h1>
+
+  <label id="drop" class="panel">
+    <b>選擇或拖曳寫過註解的 PDF</b>
+    把畫重點、底線、便利貼、文字框的內容抽出來，排成「上面投影片、下面逐條註解」的 Word
+    <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
+  </label>
+
+  <section class="panel">
+    <div class="opts">
+      <label class="opt"><span>投影片寬度：<b id="wv"></b></span>
+        <input id="width" type="range" min="30" max="100" step="5" value="70">
+      </label>
+      <label class="opt">註解下面再留幾行空白
+        <input id="lines" type="number" min="0" max="40" value="1">
+      </label>
+      <label class="opt">紙張
+        <select id="paper">
+          <option value="a4p">A4 直式</option>
+          <option value="a4l">A4 橫式</option>
+          <option value="ltrp">Letter 直式</option>
+        </select>
+      </label>
+      <label class="opt check"><input id="marks" type="checkbox" checked>投影片上保留原本的畫線和筆跡</label>
+      <label class="opt check"><input id="badge" type="checkbox" checked>在投影片上標出註解編號</label>
+      <label class="opt check"><input id="onlyAnn" type="checkbox">只放有註解的頁面</label>
+      <label class="opt check"><input id="ink" type="checkbox">手寫筆跡、圖形也列一條</label>
+      <label class="opt check"><input id="meta" type="checkbox">註解後面加作者和日期</label>
+      <label class="opt check"><input id="border" type="checkbox" checked>投影片加細框</label>
+    </div>
+  </section>
+
+  <section class="panel" id="previewBox" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <b id="summary"></b>
+      <div class="row">
+        <button class="ghost" id="copy">複製全部註解文字</button>
+        <button class="ghost" id="clear">清除檔案</button>
+      </div>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <div class="row">
+    <button id="go" disabled>產生 Word 檔</button>
+    <span id="status"></span>
+  </div>
+  <p class="hint">手寫的字目前沒辦法自動轉成文字，會保留在投影片圖上。全部在你的瀏覽器裡處理，檔案不會上傳。</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const CDN='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+const NPM='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/'; // 中文字型對照表
+pdfjsLib.GlobalWorkerOptions.workerSrc=CDN+'pdf.worker.min.js';
+const $=id=>document.getElementById(id);
+const pages=[]; // {file, num, pdf, w, h, notes:[...], blob, url, on}
+const docs=[];
+let firstName='';
+
+// ---------- settings ----------
+const keys=['width','lines','paper','marks','badge','onlyAnn','ink','meta','border'];
+try{const s=JSON.parse(localStorage.getItem('pdfNotesOpts')||'{}');
+  keys.forEach(k=>{if(s[k]!==undefined){const el=$(k);el.type==='checkbox'?el.checked=s[k]:el.value=s[k];}});}catch(e){}
+function save(){const s={};keys.forEach(k=>{const el=$(k);s[k]=el.type==='checkbox'?el.checked:el.value;});
+  try{localStorage.setItem('pdfNotesOpts',JSON.stringify(s));}catch(e){}}
+$('wv').textContent=$('width').value+'%';
+keys.forEach(k=>$(k).addEventListener('input',()=>{$('wv').textContent=$('width').value+'%';save();
+  if(k==='marks'||k==='badge'||k==='ink')rerender();else draw();}));
+
+// ---------- loading ----------
+const drop=$('drop');
+['dragover','dragenter'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',ev=>load([...ev.dataTransfer.files]));
+$('file').addEventListener('change',ev=>{load([...ev.target.files]);ev.target.value='';});
+
+const TYPES={Highlight:'mark',Underline:'mark',StrikeOut:'mark',Squiggly:'mark',Text:'note',FreeText:'note',
+  Square:'shape',Circle:'shape',Line:'shape',Polygon:'shape',PolyLine:'shape',Ink:'shape',Stamp:'shape',Caret:'note',FileAttachment:'note'};
+const isCJK=c=>/[⺀-鿿豈-﫿＀-￯　-〿]/.test(c);
+
+async function load(files){
+  const pdfs=files.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');
+  if(!pdfs.length)return;
+  $('go').disabled=true;
+  for(const f of pdfs){
+    if(!firstName)firstName=f.name.replace(/\.pdf$/i,'');
+    try{
+      const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer(),cMapUrl:NPM+'cmaps/',cMapPacked:true,standardFontDataUrl:NPM+'standard_fonts/'}).promise;
+      docs.push(pdf);
+      for(let i=1;i<=pdf.numPages;i++){
+        $('status').textContent=`讀取 ${f.name}：${i} / ${pdf.numPages}`;
+        const page=await pdf.getPage(i);
+        const vp=page.getViewport({scale:1});
+        const p={file:f.name,num:i,pdf,w:vp.width,h:vp.height,on:true,notes:await extract(page)};
+        p.blob=await render(page,p);p.url=URL.createObjectURL(p.blob);
+        pages.push(p);
+      }
+    }catch(e){console.error(e);alert(`無法讀取 ${f.name}：${e.message}`);}
+  }
+  $('previewBox').hidden=!pages.length;
+  draw();
+}
+
+// 抽出一頁的註解，依閱讀順序排好
+async function extract(page){
+  const anns=(await page.getAnnotations({intent:'display'})).filter(a=>TYPES[a.subtype]);
+  if(!anns.length)return [];
+  let tc=null;
+  const byId={}, out=[];
+  for(const a of anns){
+    const n={kind:TYPES[a.subtype],sub:a.subtype,id:a.id,rect:a.rect,
+      text:clean(a.contentsObj?.str ?? a.contents ?? ''),
+      author:clean(a.titleObj?.str ?? a.title ?? ''),
+      date:fmtDate(a.modificationDate||a.creationDate),
+      color:a.color?[...a.color]:null,quote:'',replies:[],reply:a.inReplyTo||null};
+    if(n.kind==='mark'){
+      if(!tc)tc=await page.getTextContent();
+      n.quote=quoteText(tc,a.quadPoints,a.rect);
+    }
+    byId[n.id]=n;out.push(n);
+  }
+  // 回覆掛到原註解下面
+  const top=[];
+  out.forEach(n=>{const parent=n.reply&&byId[n.reply];if(parent&&parent!==n)parent.replies.push(n);else top.push(n);});
+  // 由上到下、由左到右
+  top.sort((a,b)=>{const ay=a.rect[3],by=b.rect[3];if(Math.abs(ay-by)>8)return by-ay;return a.rect[0]-b.rect[0];});
+  return top;
+}
+function clean(s){return String(s||'').replace(/\r\n?/g,'\n').replace(/\u0000/g,'').trim();}
+function fmtDate(d){if(!d)return '';const m=/D:(\d{4})(\d{2})(\d{2})/.exec(d)||/^(\d{4})-?(\d{2})-?(\d{2})/.exec(d);return m?`${m[1]}/${m[2]}/${m[3]}`:'';}
+
+// 由畫線範圍找出被畫到的字
+function quads(qp,rect){
+  const out=[];
+  if(qp&&qp.length){
+    if(Array.isArray(qp[0])){qp.forEach(q=>{const xs=q.map(p=>p.x),ys=q.map(p=>p.y);out.push([Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]);});}
+    else for(let i=0;i+7<qp.length;i+=8){const xs=[qp[i],qp[i+2],qp[i+4],qp[i+6]],ys=[qp[i+1],qp[i+3],qp[i+5],qp[i+7]];
+      out.push([Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]);}
+  }
+  if(!out.length&&rect)out.push(rect);
+  return out;
+}
+const mctx=document.createElement('canvas').getContext('2d');mctx.font='100px Arial,sans-serif';
+const cw={};const charW=c=>cw[c]??=(isCJK(c)?100:mctx.measureText(c).width||50);
+function quoteText(tc,qp,rect){
+  const Q=quads(qp,rect), parts=[];
+  Q.forEach(q=>{
+    const hit=[];
+    tc.items.forEach(it=>{
+      if(!it.str)return;
+      const t=it.transform, sx=Math.hypot(t[0],t[1]);
+      if(Math.abs(t[1])>0.01*sx)return; // 只處理水平文字
+      const h=it.height||Math.abs(t[3])||sx, y0=t[5]-h*0.2, y1=t[5]+h*0.8;
+      const ov=Math.min(y1,q[3])-Math.max(y0,q[1]);
+      if(ov<Math.min(h,q[3]-q[1])*0.5)return;
+      const chars=[...it.str], wts=chars.map(c=>charW(c)), tot=wts.reduce((a,b)=>a+b,0)||1;
+      let x=t[4];
+      chars.forEach((c,i)=>{const cw=it.width*wts[i]/tot, cx=x+cw/2;x+=cw;
+        if(cx>=q[0]-1&&cx<=q[2]+1)hit.push({c,x:cx});});
+    });
+    hit.sort((a,b)=>a.x-b.x);
+    const s=hit.map(h=>h.c).join('').replace(/\s+/g,' ').trim();
+    if(s)parts.push(s);
+  });
+  return parts.reduce((acc,s)=>{if(!acc)return s;const a=acc.slice(-1),b=s[0];
+    if(a==='-')return acc.slice(0,-1)+s;return acc+(isCJK(a)||isCJK(b)?'':' ')+s;},'');
+}
+
+function listed(p){return p.notes.filter(n=>n.kind!=='shape'||n.text||n.replies.length||$('ink').checked);}
+
+async function render(page,p){
+  const vp1=page.getViewport({scale:1});
+  const scale=Math.min(4,1800/Math.max(vp1.width,vp1.height));
+  const vp=page.getViewport({scale});
+  const c=document.createElement('canvas');
+  c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+  const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  await page.render({canvasContext:ctx,viewport:vp,
+    annotationMode:$('marks').checked?pdfjsLib.AnnotationMode.ENABLE:pdfjsLib.AnnotationMode.DISABLE}).promise;
+  if($('badge').checked){
+    const r=Math.max(14,c.width/55);
+    listed(p).forEach((n,i)=>{
+      const [x0,y0,x1,y1]=vp.convertToViewportRectangle(n.rect);
+      const cx=Math.max(r,Math.min(c.width-r,Math.min(x0,x1)-r*0.6)), cy=Math.max(r,Math.min(c.height-r,Math.min(y0,y1)));
+      ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.fillStyle='#e8590c';ctx.fill();
+      ctx.lineWidth=r*0.18;ctx.strokeStyle='#fff';ctx.stroke();
+      ctx.fillStyle='#fff';ctx.font=`bold ${r*1.2}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(String(i+1),cx,cy+r*0.06);
+    });
+  }
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.88));
+  c.width=c.height=0;
+  return blob;
+}
+let renderJob=0;
+async function rerender(){
+  const job=++renderJob;
+  draw();
+  for(let i=0;i<pages.length;i++){
+    if(job!==renderJob)return;
+    const p=pages[i];
+    $('status').textContent=`更新圖片 ${i+1} / ${pages.length}`;
+    const page=await p.pdf.getPage(p.num);
+    const blob=await render(page,p);
+    if(job!==renderJob)return;
+    URL.revokeObjectURL(p.url);p.blob=blob;p.url=URL.createObjectURL(blob);
+  }
+  draw();
+}
+
+// ---------- 預覽 ----------
+const lighten=(c,k=0.55)=>c?c.map(v=>Math.round(v+(255-v)*k)):[255,236,140];
+const hex=c=>c.map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+function chosen(){return pages.filter(p=>p.on&&(!$('onlyAnn').checked||listed(p).length));}
+function label(p){return (new Set(pages.map(x=>x.file)).size>1?p.file.replace(/\.pdf$/i,'')+' – ':'')+'第 '+p.num+' 頁';}
+function metaStr(n){return $('meta').checked?[n.author,n.date].filter(Boolean).join(' · '):'';}
+
+function draw(){
+  const box=$('list');box.innerHTML='';
+  if(!pages.length){$('go').disabled=true;$('status').textContent='';return;}
+  const multi=new Set(pages.map(x=>x.file)).size>1;
+  let total=0,lastFile=null;
+  pages.forEach(p=>{
+    const items=listed(p);total+=items.length;
+    if($('onlyAnn').checked&&!items.length)return;
+    if(multi&&p.file!==lastFile){const h=document.createElement('div');h.className='fhead';h.textContent=p.file;box.appendChild(h);}
+    lastFile=p.file;
+    const card=document.createElement('div');card.className='card'+(p.on?'':' off');
+    const left=document.createElement('div');
+    const pn=document.createElement('div');pn.className='pn';
+    const cb=document.createElement('label');cb.innerHTML='<input type="checkbox">放進 Word';
+    cb.firstChild.checked=p.on;cb.firstChild.onchange=e=>{p.on=e.target.checked;draw();};
+    const t=document.createElement('span');t.textContent='第 '+p.num+' 頁';
+    pn.append(t,cb);
+    const img=new Image();img.src=p.url;img.loading='lazy';
+    left.append(pn,img);
+    const right=document.createElement('div');
+    if(!items.length){right.innerHTML='<div class="none">這頁沒有註解</div>';}
+    else{const ol=document.createElement('ol');
+      items.forEach((n,i)=>{const li=document.createElement('li');
+        const b=document.createElement('b');b.textContent=(i+1)+'.';
+        const d=document.createElement('div');
+        if(n.quote){const q=document.createElement('span');q.className='q';q.textContent=n.quote;
+          q.style.background='#'+hex(lighten(n.color));
+          if(n.sub==='Underline'||n.sub==='Squiggly')q.style.textDecoration='underline';
+          if(n.sub==='StrikeOut')q.style.textDecoration='line-through';
+          d.appendChild(q);}
+        const body=n.text||(n.quote?'':shapeName(n));
+        if(body){const s=document.createElement('div');s.style.whiteSpace='pre-wrap';s.textContent=body;if(!n.text)s.className='none';d.appendChild(s);}
+        const m=metaStr(n);if(m){const s=document.createElement('div');s.className='meta';s.textContent=m;d.appendChild(s);}
+        n.replies.forEach(r=>{const s=document.createElement('div');s.className='rep';s.style.whiteSpace='pre-wrap';
+          s.textContent='↳ '+(r.author?r.author+'：':'')+r.text;d.appendChild(s);});
+        li.append(b,d);ol.appendChild(li);});
+      right.appendChild(ol);}
+    card.append(left,right);box.appendChild(card);
+  });
+  const n=chosen().length;
+  $('summary').textContent=`${pages.length} 頁，共 ${total} 則註解`;
+  $('status').textContent=`將放入 ${n} 頁`;
+  $('go').disabled=!n;
+}
+function shapeName(n){return n.kind==='mark'?'（畫線的地方抓不到文字，請看投影片）':n.sub==='Ink'?'（手寫筆跡，請看投影片）':'（圖形標記，請看投影片）';}
+
+$('clear').onclick=()=>{pages.forEach(p=>URL.revokeObjectURL(p.url));pages.length=0;docs.forEach(d=>d.destroy());docs.length=0;
+  firstName='';$('previewBox').hidden=true;draw();};
+
+function plainText(){
+  const out=[];
+  chosen().forEach(p=>{
+    const items=listed(p);if(!items.length)return;
+    out.push(label(p));
+    items.forEach((n,i)=>{
+      const pre=(i+1)+'. ', pad=' '.repeat(pre.length);
+      const lines=[];
+      if(n.quote)lines.push('「'+n.quote+'」');
+      const body=n.text||(n.quote?'':shapeName(n));
+      if(body)lines.push(...body.split('\n'));
+      const m=metaStr(n);if(m)lines.push('('+m+')');
+      n.replies.forEach(r=>lines.push('↳ '+(r.author?r.author+'：':'')+r.text.replace(/\n/g,' ')));
+      lines.forEach((l,k)=>out.push((k?pad:pre)+l));
+    });
+    out.push('');
+  });
+  return out.join('\n').trim();
+}
+$('copy').onclick=async()=>{
+  const t=plainText();
+  try{await navigator.clipboard.writeText(t);$('status').textContent='已複製全部註解文字';}
+  catch(e){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();$('status').textContent='已複製全部註解文字';}
+};
+
+// ---------- docx ----------
+const EMU_PER_TWIP=635;
+const PAPERS={a4p:[11906,16838],a4l:[16838,11906],ltrp:[12240,15840]};
+const MARGIN=1134; // 2 cm
+const esc=t=>t.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const P=(inner='',ppr='')=>`<w:p>${ppr?`<w:pPr>${ppr}</w:pPr>`:''}${inner}</w:p>`;
+// 文字 run，\n 變成換行
+const R=(t,rpr='')=>t.split('\n').map((s,i)=>`<w:r>${rpr?`<w:rPr>${rpr}</w:rPr>`:''}${i?'<w:br/>':''}<w:t xml:space="preserve">${esc(s)}</w:t></w:r>`).join('');
+const GRAY='<w:color w:val="7F7F7F"/>';
+
+function picXml(idx,cx,cy,border){
+  const ln=border?'<a:ln w="6350"><a:solidFill><a:srgbClr val="A6A6A6"/></a:solidFill></a:ln>':'';
+  return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${idx}" name="投影片 ${idx}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${idx}" name="slide${idx}.jpg"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="img${idx}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${ln}</pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+}
+
+function noteXml(n,i){
+  const IND=420, num=`<w:r><w:rPr><w:b/><w:color w:val="E8590C"/></w:rPr><w:t xml:space="preserve">${i+1}.</w:t></w:r><w:r><w:tab/></w:r>`;
+  const first=`<w:tabs><w:tab w:val="left" w:pos="${IND}"/></w:tabs><w:spacing w:before="100"/><w:ind w:left="${IND}" w:hanging="${IND}"/>`;
+  const rest=`<w:ind w:left="${IND}"/>`;
+  const paras=[];
+  if(n.quote){
+    const deco=n.sub==='StrikeOut'?'<w:strike/>':(n.sub==='Underline'||n.sub==='Squiggly')?'<w:u w:val="single"/>':'';
+    paras.push(R(n.quote,`${deco}<w:shd w:val="clear" w:color="auto" w:fill="${hex(lighten(n.color))}"/>`));
+  }
+  const body=n.text||(n.quote?'':shapeName(n));
+  if(body)paras.push(R(body,n.text?'':GRAY));
+  let xml=paras.map((r,k)=>P((k?'':num)+r,k?rest:first)).join('');
+  const m=metaStr(n);
+  if(m)xml+=P(R(m,GRAY+'<w:sz w:val="18"/>'),rest);
+  n.replies.forEach(r=>{xml+=P(R('↳ '+(r.author?r.author+'：':'')+r.text,GRAY),`<w:ind w:left="${IND*2}"/>`);});
+  return xml;
+}
+
+async function build(){
+  const [pw,ph]=PAPERS[$('paper').value], uw=pw-2*MARGIN, uh=ph-2*MARGIN;
+  const width=+$('width').value/100, lines=+$('lines').value||0, border=$('border').checked;
+  const list=chosen(), multi=new Set(list.map(p=>p.file)).size>1;
+  const zip=new JSZip();
+  let body='',rels='',lastFile=null;
+  list.forEach((p,i)=>{
+    const idx=i+1;
+    if(multi&&p.file!==lastFile)body+=P(R(p.file.replace(/\.pdf$/i,'')),'<w:pStyle w:val="Heading1"/>'+(i?'<w:pageBreakBefore/>':''));
+    lastFile=p.file;
+    let cx=Math.round(uw*width*EMU_PER_TWIP), cy=Math.round(cx*p.h/p.w);
+    const maxH=(uh-900)*EMU_PER_TWIP; if(cy>maxH){cy=Math.round(maxH);cx=Math.round(cy*p.w/p.h);}
+    body+=P(R('第 '+p.num+' 頁',GRAY+'<w:sz w:val="18"/>'),`<w:keepNext/><w:spacing w:before="${i?360:0}"/>`);
+    body+=P(picXml(idx,cx,cy,border),'<w:keepNext/><w:spacing w:before="40" w:after="60" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/>');
+    zip.file(`word/media/slide${idx}.jpg`,p.blob);
+    rels+=`<Relationship Id="img${idx}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/slide${idx}.jpg"/>`;
+    const items=listed(p);
+    if(!items.length)body+=P(R('（這頁沒有註解）',GRAY));
+    items.forEach((n,k)=>body+=noteXml(n,k));
+    body+=P().repeat(lines);
+  });
+
+  const doc=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${body}<w:sectPr><w:pgSz w:w="${pw}" w:h="${ph}"${pw>ph?' w:orient="landscape"':''}/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+
+  zip.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`);
+  zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  zip.file('word/_rels/document.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${rels}</Relationships>`);
+  zip.file('word/styles.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="微軟正黑體" w:cs="Calibri"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="en-US" w:eastAsia="zh-TW"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style></w:styles>`);
+  zip.file('word/document.xml',doc);
+  return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'},m=>{$('status').textContent=`打包中 ${Math.round(m.percent)}%`;});
+}
+
+$('go').onclick=async()=>{
+  $('go').disabled=true;
+  try{
+    const blob=await build();
+    const name=(firstName||'PDF')+'-註解.docx';
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+    $('status').textContent=`已下載：${name}`;
+  }catch(e){console.error(e);$('status').textContent='產生失敗：'+e.message;}
+  $('go').disabled=false;
+};
+window.__test={load,build,pages,plainText};
+</script>
+</body>
+</html>
