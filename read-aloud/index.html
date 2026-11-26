@@ -94,6 +94,12 @@ dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
   <p class="note">朗讀時螢幕會保持亮著；鎖螢幕或切到別的 App，朗讀會停，回來按播放即可從原處繼續。<br>想要更自然的聲音：iPhone 設定 → 輔助使用 → 朗讀內容 → 聲音 → 中文（台灣），下載「增強版」或「高品質」聲音，再回這裡選。</p>
   <div class="row"><button class="ok" id="setClose">完成</button></div>
 </dialog>
+<dialog id="pwDlg">
+  <h3 id="pwMsg">這份 PDF 有設密碼</h3>
+  <input id="pwIn" type="password" autocomplete="off" placeholder="輸入密碼" style="width:100%;font:inherit;font-size:18px;padding:12px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px">
+  <p class="note">密碼只用來在這支手機上打開檔案，不會儲存或傳出去。</p>
+  <div class="row"><button id="pwCancel">取消</button><button class="ok" id="pwOk">打開</button></div>
+</dialog>
 <div id="toast"></div>
 
 <script>
@@ -233,7 +239,10 @@ document.addEventListener('visibilitychange',()=>{
 function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>no(new Error('載入失敗，請檢查網路'));document.head.appendChild(s)})}
 async function readPdf(buf){
   if(!window.pdfjsLib){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
-  const pdf=await pdfjsLib.getDocument({data:buf,cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',cMapPacked:true,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'}).promise;
+  const task=pdfjsLib.getDocument({data:buf,cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',cMapPacked:true,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'});
+  task.onPassword=(update,reason)=>askPassword(reason===2).then(pw=>{if(pw==null){task.destroy();}else update(pw)});
+  let pdf;
+  try{pdf=await task.promise}catch(e){if(e&&e.name==='PasswordException'||/destroy|password/i.test(e&&e.message||''))throw new Error('已取消（需要密碼）');throw e}
   let out='';
   for(let i=1;i<=pdf.numPages;i++){
     toast('讀取第 '+i+' / '+pdf.numPages+' 頁…',60000);
@@ -283,15 +292,22 @@ async function openFile(f){
     const head=new Uint8Array(buf.slice(0,4));
     let text;
     if(ext==='pdf'||(head[0]===0x25&&head[1]===0x50))text=await readPdf(buf);
+    else if(head[0]===0xD0&&head[1]===0xCF&&ext!=='txt'){toast(ext==='doc'?'舊版 .doc 不支援，請先另存成 .docx 或 PDF':'這份 Word 有設密碼，網頁打不開。請在電腦的 Word 移除密碼，或另存成 PDF（PDF 可以設密碼）',6000);return}
     else if(ext==='docx'||(head[0]===0x50&&head[1]===0x4b))text=await readDocx(buf);
     else if(ext==='doc'){toast('舊版 .doc 不支援，請先另存成 .docx 或 PDF',4000);return}
     else{text=decodeText(buf);if(/^(html?)$/.test(ext))text=new DOMParser().parseFromString(text,'text/html').body.innerText}
     $('toast').style.display='none';
     setDoc(name,text,false);
-  }catch(e){console.error(e);toast('打不開這個檔案：'+(e.message||e),4000)}
+  }catch(e){console.error(e);toast(/^已取消/.test(e.message||'')?'已取消':'打不開這個檔案：'+(e.message||e),4000)}
 }
 
 /* ---------- 對話框 ---------- */
+function askPassword(wrong){
+  return new Promise(ok=>{const d=$('pwDlg');$('pwMsg').textContent=wrong?'密碼不對，請再試一次':'這份 PDF 有設密碼';$('pwIn').value='';
+    $('toast').style.display='none';
+    $('pwOk').onclick=()=>{d.close();ok($('pwIn').value)};$('pwCancel').onclick=()=>{d.close();ok(null)};
+    $('pwIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('pwOk').click()}};
+    d.showModal();setTimeout(()=>$('pwIn').focus(),50)})}
 function openPaste(){$('openDlg').close();$('pasteTxt').value='';$('pasteDlg').showModal()}
 $('openBtn').onclick=()=>$('openDlg').showModal();
 $('openClose').onclick=()=>$('openDlg').close();
