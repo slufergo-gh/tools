@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1418">
+<title>投影片筆記</title>
+<style>
+:root{--bg:#0f1418;--panel:#182027;--line:#26313a;--fg:#e9eef2;--muted:#8a99a6;--accent:#2f80ed;--off:#3a1d1d;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  padding:calc(20px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+main{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font-size:22px;margin:0}
+a.back{color:var(--muted);text-decoration:none;font-size:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+#drop{border:2px dashed var(--line);text-align:center;padding:32px 16px;cursor:pointer;color:var(--muted)}
+#drop.over{border-color:var(--accent);color:var(--fg)}
+#drop b{display:block;color:var(--fg);font-size:18px;margin-bottom:6px}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px 20px}
+.opt{display:flex;flex-direction:column;gap:6px;font-size:14px;color:var(--muted)}
+.opt select,.opt input[type=number]{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-size:15px}
+.opt input[type=range]{width:100%}
+.check{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
+.check input{width:18px;height:18px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button{background:var(--accent);color:#fff;border:0;border-radius:12px;padding:13px 20px;font-size:16px;font-weight:600;cursor:pointer}
+button:disabled{opacity:.4;cursor:default}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg);font-weight:400;padding:9px 14px;font-size:14px}
+#status{font-size:14px;color:var(--muted)}
+#thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.th{position:relative;border-radius:8px;overflow:hidden;border:2px solid transparent;cursor:pointer;background:#fff}
+.th img{display:block;width:100%}
+.th span{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;padding:1px 6px;border-radius:6px}
+.th.off{border-color:#c0392b;opacity:.35}
+.th.off::after{content:"略過";position:absolute;inset:auto 4px 4px auto;background:#c0392b;color:#fff;font-size:12px;padding:1px 6px;border-radius:6px}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.file{font-size:13px;color:var(--fg);margin:12px 0 6px;grid-column:1/-1}
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="../">‹ 我的工具</a>
+  <h1>投影片筆記</h1>
+
+  <label id="drop" class="panel">
+    <b>選擇或拖曳 PDF</b>
+    可一次選多個檔案，每頁投影片會排進同一份 Word
+    <input id="file" type="file" accept="application/pdf,.pdf,.ppt,.pptx" multiple hidden>
+  </label>
+  <p class="hint">PowerPoint 檔請先在 PowerPoint 用「另存新檔 → PDF」（或「匯出 → PDF」）再丟進來。</p>
+
+  <section class="panel">
+    <div class="opts">
+      <label class="opt">版面
+        <select id="layout">
+          <option value="stack">上圖下筆記（連續排）</option>
+          <option value="page1">每頁 1 張投影片</option>
+          <option value="page2">每頁 2 張投影片</option>
+          <option value="side">左圖右筆記</option>
+        </select>
+      </label>
+      <label class="opt"><span>投影片寬度：<b id="wv"></b></span>
+        <input id="width" type="range" min="30" max="100" step="5" value="80">
+      </label>
+      <label class="opt" id="linesBox">每張下面的筆記空行
+        <input id="lines" type="number" min="0" max="40" value="4">
+      </label>
+      <label class="opt">紙張
+        <select id="paper">
+          <option value="a4p">A4 直式</option>
+          <option value="a4l">A4 橫式</option>
+          <option value="ltrp">Letter 直式</option>
+        </select>
+      </label>
+      <label class="opt check"><input id="border" type="checkbox" checked>投影片加細框</label>
+      <label class="opt check"><input id="num" type="checkbox">標上頁碼（第 N 頁）</label>
+    </div>
+  </section>
+
+  <section class="panel" id="previewBox" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <p class="hint">點縮圖可略過不要的頁面</p>
+      <div class="row">
+        <button class="ghost" id="allOn">全選</button>
+        <button class="ghost" id="clear">清除檔案</button>
+      </div>
+    </div>
+    <div id="thumbs"></div>
+  </section>
+
+  <div class="row">
+    <button id="go" disabled>產生 Word 檔</button>
+    <span id="status"></span>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const $=id=>document.getElementById(id);
+const slides=[]; // {file, page, w, h, thumb, on, blob}
+let firstName='';
+
+// ---------- settings ----------
+const keys=['layout','width','lines','paper','border','num'];
+try{const s=JSON.parse(localStorage.getItem('slideNotesOpts')||'{}');
+  keys.forEach(k=>{if(s[k]!==undefined){const el=$(k);el.type==='checkbox'?el.checked=s[k]:el.value=s[k];}});}catch(e){}
+function save(){const s={};keys.forEach(k=>{const el=$(k);s[k]=el.type==='checkbox'?el.checked:el.value;});
+  try{localStorage.setItem('slideNotesOpts',JSON.stringify(s));}catch(e){}}
+function syncUI(){$('wv').textContent=$('width').value+'%';
+  const l=$('layout').value;$('linesBox').style.display=(l==='stack'||l==='side')?'':'none';
+  $('linesBox').firstChild.textContent=l==='side'?'右側筆記欄的空行':'每張下面的筆記空行';}
+keys.forEach(k=>$(k).addEventListener('input',()=>{syncUI();save();}));
+syncUI();
+
+// ---------- loading ----------
+const drop=$('drop');
+['dragover','dragenter'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',ev=>load([...ev.dataTransfer.files]));
+$('file').addEventListener('change',ev=>{load([...ev.target.files]);ev.target.value='';});
+
+async function load(files){
+  const pdfs=files.filter(f=>/\.pdf$/i.test(f.name)||f.type==='application/pdf');
+  if(files.some(f=>/\.pptx?$/i.test(f.name)))alert('PowerPoint 檔請先另存成 PDF 再選取。');
+  if(!pdfs.length)return;
+  $('go').disabled=true;
+  for(const f of pdfs){
+    if(!firstName)firstName=f.name.replace(/\.pdf$/i,'');
+    try{
+      const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+      if(pdfs.length>1||slides.length)addHeader(f.name);
+      for(let i=1;i<=pdf.numPages;i++){
+        $('status').textContent=`讀取 ${f.name}：${i} / ${pdf.numPages}`;
+        const page=await pdf.getPage(i);
+        const blob=await render(page);
+        const vp=page.getViewport({scale:1});
+        const s={file:f.name,page:i,w:vp.width,h:vp.height,blob,on:true};
+        slides.push(s);addThumb(s);
+        page.cleanup();
+      }
+      pdf.destroy();
+    }catch(e){console.error(e);alert(`無法讀取 ${f.name}：${e.message}`);}
+  }
+  $('previewBox').hidden=!slides.length;
+  updateStatus();
+}
+
+async function render(page){
+  const vp1=page.getViewport({scale:1});
+  const scale=Math.min(4,1800/Math.max(vp1.width,vp1.height));
+  const vp=page.getViewport({scale});
+  const c=document.createElement('canvas');
+  c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+  const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',0.88));
+  c.width=c.height=0;
+  return blob;
+}
+
+function addHeader(name){const d=document.createElement('div');d.className='file';d.textContent=name;$('thumbs').appendChild(d);}
+function addThumb(s){
+  const d=document.createElement('div');d.className='th';
+  const img=new Image();img.src=URL.createObjectURL(s.blob);img.loading='lazy';
+  const sp=document.createElement('span');sp.textContent=s.page;
+  d.append(img,sp);
+  d.onclick=()=>{s.on=!s.on;d.classList.toggle('off',!s.on);updateStatus();};
+  s.el=d;$('thumbs').appendChild(d);
+}
+function updateStatus(){
+  const n=slides.filter(s=>s.on).length;
+  $('status').textContent=slides.length?`共 ${slides.length} 頁，將放入 ${n} 頁`:'';
+  $('go').disabled=!n;
+}
+$('allOn').onclick=()=>{slides.forEach(s=>{s.on=true;s.el.classList.remove('off');});updateStatus();};
+$('clear').onclick=()=>{slides.forEach(s=>URL.revokeObjectURL(s.el.querySelector('img').src));
+  slides.length=0;firstName='';$('thumbs').innerHTML='';$('previewBox').hidden=true;updateStatus();};
+
+// ---------- docx ----------
+const EMU_PER_TWIP=635;
+const PAPERS={a4p:[11906,16838],a4l:[16838,11906],ltrp:[12240,15840]};
+const MARGIN=1134; // 2 cm
+const esc=t=>t.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function picXml(idx,cx,cy,border){
+  const ln=border?'<a:ln w="6350"><a:solidFill><a:srgbClr val="A6A6A6"/></a:solidFill></a:ln>':'';
+  return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${idx}" name="投影片 ${idx}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${idx}" name="slide${idx}.jpg"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="img${idx}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${ln}</pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+}
+const P=(inner='',ppr='')=>`<w:p>${ppr?`<w:pPr>${ppr}</w:pPr>`:''}${inner}</w:p>`;
+const T=t=>`<w:r><w:rPr><w:color w:val="7F7F7F"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${esc(t)}</w:t></w:r>`;
+const blank=n=>P().repeat(Math.max(0,n));
+
+async function build(){
+  const o={layout:$('layout').value,width:+$('width').value/100,lines:+$('lines').value||0,border:$('border').checked,num:$('num').checked,paper:PAPERS[$('paper').value]};
+  const [pw,ph]=o.paper, uw=pw-2*MARGIN, uh=ph-2*MARGIN;
+  const list=slides.filter(s=>s.on);
+  const multi=new Set(list.map(s=>s.file)).size>1;
+  const zip=new JSZip();
+  let body='',rels='',lastFile=null,pairStart=0;
+  const label=s=>(multi?s.file.replace(/\.pdf$/i,'')+' – ':'')+'第 '+s.page+' 頁';
+
+  list.forEach((s,i)=>{
+    const idx=i+1;
+    zip.file(`word/media/slide${idx}.jpg`,s.blob);
+    rels+=`<Relationship Id="img${idx}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/slide${idx}.jpg"/>`;
+    const ratio=s.h/s.w;
+    let wTw, cx, cy;
+    const newFile=multi&&s.file!==lastFile; lastFile=s.file;
+    let brk=i>0&&(newFile||o.layout==='page1'||(o.layout==='page2'&&i%2===0));
+    if(o.layout==='page2'&&newFile)pairStart=i;
+    if(o.layout==='page2')brk=i>0&&(newFile||(i-pairStart)%2===0);
+    const pb=()=>{if(brk){brk=false;return '<w:pageBreakBefore/>';}return '';};
+    const fileHead=newFile?P(`<w:r><w:t xml:space="preserve">${esc(s.file.replace(/\.pdf$/i,''))}</w:t></w:r>`,'<w:pStyle w:val="Heading1"/>'+pb()):'';
+
+    if(o.layout==='side'){
+      const leftTw=Math.round(uw*Math.min(o.width,0.75)), rightTw=uw-leftTw;
+      wTw=leftTw-120; cx=wTw*EMU_PER_TWIP; cy=Math.round(cx*ratio);
+      const cap=o.num?P(T(label(s))):'';
+      body+=fileHead+`<w:tbl><w:tblPr><w:tblW w:w="${uw}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="D9D9D9"/><w:bottom w:val="single" w:sz="4" w:color="D9D9D9"/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${leftTw}"/><w:gridCol w:w="${rightTw}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${leftTw}" w:type="dxa"/></w:tcPr>${cap}${P(picXml(idx,cx,cy,o.border))}</w:tc><w:tc><w:tcPr><w:tcW w:w="${rightTw}" w:type="dxa"/></w:tcPr>${P()}${blank(o.lines-1)}</w:tc></w:tr></w:tbl>`;
+      return;
+    }
+    wTw=uw*o.width; cx=Math.round(wTw*EMU_PER_TWIP); cy=Math.round(cx*ratio);
+    // keep slide within page height (minus room for caption)
+    const maxH=(o.layout==='page2'?(uh/2-700):(uh-500))*EMU_PER_TWIP;
+    if(cy>maxH){cy=Math.round(maxH);cx=Math.round(cy/ratio);}
+    const second=o.layout==='page2'&&(i-pairStart)%2===1;
+    body+=fileHead;
+    if(o.num)body+=P(T(label(s)),'<w:keepNext/>'+pb()+(second?'<w:spacing w:before="240"/>':''));
+    body+=P(picXml(idx,cx,cy,o.border),pb()+'<w:spacing w:before="'+(second&&!o.num?240:60)+'" w:after="120"/><w:jc w:val="center"/>');
+    if(o.layout==='stack')body+=blank(o.lines);
+    else body+=blank(1);
+  });
+
+  const doc=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${body}<w:sectPr><w:pgSz w:w="${pw}" w:h="${ph}"${pw>ph?' w:orient="landscape"':''}/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+
+  zip.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`);
+  zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  zip.file('word/_rels/document.xml.rels',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${rels}</Relationships>`);
+  zip.file('word/styles.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="微軟正黑體" w:cs="Calibri"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="en-US" w:eastAsia="zh-TW"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="300" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style></w:styles>`);
+  zip.file('word/document.xml',doc);
+  return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'},m=>{$('status').textContent=`打包中 ${Math.round(m.percent)}%`;});
+}
+
+$('go').onclick=async()=>{
+  $('go').disabled=true;
+  try{
+    const blob=await build();
+    const name=(firstName||'投影片')+'-筆記.docx';
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+    $('status').textContent=`已下載：${name}`;
+  }catch(e){console.error(e);$('status').textContent='產生失敗：'+e.message;}
+  $('go').disabled=false;
+};
+window.__test={load,build,slides};
+</script>
+</body>
+</html>
