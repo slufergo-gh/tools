@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="文件朗讀">
+<title>文件朗讀</title>
+<style>
+:root{--bg:#0f1418;--panel:#182027;--line:#26313a;--fg:#e9eef2;--muted:#8a99a6;--accent:#2f80ed;--hl:#f2c94c;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC","Noto Sans TC",system-ui,sans-serif;
+  display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+button{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:14px;cursor:pointer}
+button:active{border-color:var(--accent)}
+header{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+header .name{flex:1;min-width:0;font-size:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header button{padding:9px 12px;font-size:15px;white-space:nowrap}
+#text{flex:1;overflow-y:auto;padding:16px 18px 40vh;font-size:20px;line-height:1.75;-webkit-overflow-scrolling:touch}
+#text p{margin:0 0 .8em}
+#text s{text-decoration:none;border-radius:4px;cursor:pointer}
+#text s.cur{background:var(--hl);color:#111}
+.empty{color:var(--muted);font-size:17px;line-height:1.7;padding-top:8vh;text-align:center}
+.empty b{display:block;color:var(--fg);font-size:22px;margin-bottom:12px}
+.empty .big{margin-top:24px;padding:18px 28px;font-size:20px;background:var(--accent);border-color:var(--accent);color:#fff}
+.empty .paste{margin-top:12px;padding:14px 24px;font-size:17px}
+#bar{border-top:1px solid var(--line);padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px;background:var(--bg)}
+.prog{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
+.prog input{flex:1;accent-color:var(--accent)}
+.ctrl{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:10px}
+.ctrl button{height:96px;font-size:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.ctrl button svg{width:38px;height:38px;fill:currentColor}
+#play{background:var(--accent);border-color:var(--accent);color:#fff}
+#play svg{width:52px;height:52px}
+.speed{display:flex;align-items:center;gap:10px}
+.speed button{flex:1;height:52px;font-size:22px}
+.speed span{min-width:84px;text-align:center;font-size:18px}
+dialog{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:18px;width:min(560px,calc(100vw - 32px))}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog h3{margin:0 0 12px;font-size:18px}
+dialog textarea{width:100%;height:40vh;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;font-size:16px}
+dialog select{width:100%;font:inherit;font-size:16px;padding:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px}
+dialog .row{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
+dialog .row button{padding:11px 18px;font-size:16px}
+dialog .row .ok{background:var(--accent);border-color:var(--accent);color:#fff}
+dialog label{display:block;font-size:14px;color:var(--muted);margin:12px 0 6px}
+dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
+#toast{position:fixed;left:50%;top:calc(64px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:#000c;color:#fff;padding:10px 16px;border-radius:12px;font-size:15px;display:none;z-index:9;max-width:90vw;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="name" id="name">文件朗讀</div>
+  <button id="openBtn">開啟</button>
+  <button id="setBtn" aria-label="設定">設定</button>
+</header>
+<div id="text"></div>
+<div id="bar">
+  <div class="prog"><span id="pos">0 / 0</span><input type="range" id="seek" min="0" max="0" value="0"><span id="pct">0%</span></div>
+  <div class="ctrl">
+    <button id="prev"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM9.5 12l8.5 6V6z"/></svg>上一句</button>
+    <button id="play"><svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg><span id="playTxt">播放</span></button>
+    <button id="next"><svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6zM16 6h2v12h-2z"/></svg>下一句</button>
+  </div>
+  <div class="speed"><button id="slower">慢</button><span id="rateTxt">1.0 倍</span><button id="faster">快</button></div>
+</div>
+<input type="file" id="file" accept=".pdf,.docx,.txt,.md,.html,.htm,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+
+<dialog id="openDlg">
+  <h3>開啟文件</h3>
+  <div class="row" style="justify-content:stretch;flex-direction:column">
+    <button class="ok" id="pickFile" style="padding:16px">從「檔案」選擇（含 Dropbox、iCloud）</button>
+    <button id="pasteBtn" style="padding:16px">貼上文字</button>
+  </div>
+  <p class="note">支援 PDF、Word（.docx）、純文字。檔案只在這支手機上讀取，不會上傳。<br>Gmail 附件：點開附件 → 分享 → 儲存到檔案，再從這裡選。</p>
+  <div class="row"><button id="openClose">取消</button></div>
+</dialog>
+
+<dialog id="pasteDlg">
+  <h3>貼上要朗讀的文字</h3>
+  <textarea id="pasteTxt" placeholder="長按貼上"></textarea>
+  <div class="row"><button id="pasteCancel">取消</button><button class="ok" id="pasteOk">開始</button></div>
+</dialog>
+
+<dialog id="setDlg">
+  <h3>設定</h3>
+  <label for="voice">聲音</label>
+  <select id="voice"></select>
+  <label for="font">字體大小</label>
+  <select id="font"><option value="17">小</option><option value="20">中</option><option value="24">大</option><option value="28">特大</option></select>
+  <p class="note">朗讀時螢幕會保持亮著；鎖螢幕或切到別的 App，朗讀會停，回來按播放即可從原處繼續。<br>想要更自然的聲音：iPhone 設定 → 輔助使用 → 朗讀內容 → 聲音 → 中文（台灣），下載「增強版」或「高品質」聲音，再回這裡選。</p>
+  <div class="row"><button class="ok" id="setClose">完成</button></div>
+</dialog>
+<div id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const synth=window.speechSynthesis;
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}}};
+
+let doc=null;          // {name, paras:[[sentence,...],...]}
+let flat=[];           // [{p,s,text}]
+let idx=0, playing=false, token=0, wakeLock=null;
+let rate=LS.get('ra_rate',1.0), voiceURI=LS.get('ra_voice',''), fontSize=LS.get('ra_font',20);
+
+function toast(m,ms=2500){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',ms)}
+
+/* ---------- 文字切句 ---------- */
+function splitSentences(para){
+  const out=[];let buf='';
+  const re=/[^。！？!?；;…]*[。！？!?；;…]+[」』）)"'”’]*|[^。！？!?；;…]+$/g;
+  const parts=para.replace(/([.])\s+(?=[A-Z"“(])/g,'$1 \u0001').split('\u0001').flatMap(x=>x.match(re)||[x]);
+  for(let s of parts){
+    // 太長的句子用逗號再切，避免 iPhone 語音中途斷掉
+    while(s.length>160){
+      let cut=-1;
+      for(const ch of ['，',',','、','：',':',' ']){const i=s.lastIndexOf(ch,150);if(i>40){cut=i+1;break}}
+      if(cut<0)cut=150;
+      out.push(s.slice(0,cut));s=s.slice(cut);
+    }
+    if(s.trim())out.push(s);
+  }
+  // 太短的句子併到前一句
+  const merged=[];
+  for(const s of out){if(merged.length&&s.trim().length<4)merged[merged.length-1]+=s;else merged.push(s)}
+  return merged;
+}
+function cleanText(raw){
+  raw=raw.replace(/\r\n?/g,'\n').replace(/[ \t 　]+/g,' ').replace(/\f/g,'\n\n');
+  const lines=raw.split('\n').map(l=>l.trim());
+  const paras=[];let cur='';
+  const endPunct=/[。！？!?；;：:」』)）"”]$/;
+  for(const l of lines){
+    if(!l){if(cur){paras.push(cur);cur=''}continue}
+    if(/^\d{1,4}$/.test(l))continue; // 頁碼
+    if(!cur){cur=l;continue}
+    if(endPunct.test(cur)){paras.push(cur);cur=l;continue}
+    // 斷行接回：中文直接接，英文補空格
+    const a=cur.slice(-1),b=l[0];
+    cur+=(/[A-Za-z0-9,.]/.test(a)&&/[A-Za-z0-9]/.test(b))?' '+l:l;
+  }
+  if(cur)paras.push(cur);
+  return paras;
+}
+function setDoc(name,text,restore){
+  const paras=cleanText(text).map(splitSentences).filter(p=>p.length);
+  if(!paras.length){toast('這份文件找不到可以朗讀的文字（可能是掃描圖片）',4000);return}
+  stop();
+  doc={name,paras};flat=[];
+  paras.forEach((p,pi)=>p.forEach((s,si)=>flat.push({p:pi,s:si,text:s})));
+  const key=docKey();
+  idx=restore?Math.min(LS.get('ra_pos',{})[key]||0,flat.length-1):(LS.get('ra_pos',{})[key]||0);
+  if(idx>=flat.length)idx=0;
+  if(!LS.set('ra_doc',{name,text})){try{localStorage.removeItem('ra_doc')}catch(e){}}
+  render();
+  if(idx>0&&!restore)toast('從上次的位置繼續（第 '+(idx+1)+' 句）');
+}
+function docKey(){return doc.name+'|'+flat.length}
+
+/* ---------- 畫面 ---------- */
+function render(){
+  const box=$('text');
+  $('name').textContent=doc?doc.name:'文件朗讀';
+  if(!doc){
+    box.innerHTML='<div class="empty"><b>開車時用聽的看文件</b>開啟 PDF、Word 或文字檔，<br>手機會一句一句唸給你聽。<br><button class="big" id="e1">開啟文件</button><br><button class="paste" id="e2">貼上文字</button></div>';
+    $('e1').onclick=()=>$('file').click();$('e2').onclick=openPaste;
+    updateBar();return;
+  }
+  const frag=document.createDocumentFragment();let n=0;
+  doc.paras.forEach(p=>{const el=document.createElement('p');p.forEach(s=>{const sp=document.createElement('s');sp.textContent=s;sp.dataset.i=n++;el.appendChild(sp)});frag.appendChild(el)});
+  box.innerHTML='';box.appendChild(frag);
+  box.scrollTop=0;
+  highlight(true);updateBar();
+}
+function highlight(scroll){
+  const box=$('text');
+  const old=box.querySelector('s.cur');if(old)old.classList.remove('cur');
+  const el=box.querySelector('s[data-i="'+idx+'"]');
+  if(el){el.classList.add('cur');if(scroll){const r=el.getBoundingClientRect(),b=box.getBoundingClientRect();if(r.top<b.top+20||r.bottom>b.top+b.height*0.55)box.scrollTo({top:box.scrollTop+r.top-b.top-b.height*0.25,behavior:'smooth'})}}
+}
+function updateBar(){
+  const n=flat.length;
+  $('pos').textContent=n?(idx+1)+' / '+n:'0 / 0';
+  $('pct').textContent=n?Math.round(idx/Math.max(1,n-1)*100)+'%':'0%';
+  $('seek').max=Math.max(0,n-1);$('seek').value=idx;
+  $('rateTxt').textContent=rate.toFixed(1)+' 倍';
+  $('playTxt').textContent=playing?'暫停':'播放';
+  $('playIcon').innerHTML=playing?'<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>':'<path d="M8 5v14l11-7z"/>';
+  $('text').style.fontSize=fontSize+'px';
+}
+function savePos(){if(!doc)return;const m=LS.get('ra_pos',{});m[docKey()]=idx;const keys=Object.keys(m);if(keys.length>30)delete m[keys[0]];LS.set('ra_pos',m)}
+
+/* ---------- 朗讀 ---------- */
+function pickVoice(){
+  const vs=synth.getVoices();
+  return vs.find(v=>v.voiceURI===voiceURI)||vs.find(v=>v.lang==='zh-TW'||v.lang==='zh_TW')||vs.find(v=>/^zh/i.test(v.lang))||null;
+}
+function speakCurrent(){
+  if(!playing||!flat[idx])return;
+  const my=++token;
+  const u=new SpeechSynthesisUtterance(flat[idx].text);
+  const v=pickVoice();if(v){u.voice=v;u.lang=v.lang}else u.lang='zh-TW';
+  u.rate=rate;
+  u.onend=()=>{if(my!==token||!playing)return;
+    if(idx<flat.length-1){idx++;savePos();highlight(true);updateBar();speakCurrent()}
+    else{playing=false;releaseWake();updateBar();toast('唸完了')}};
+  u.onerror=e=>{if(my!==token)return;if(e.error==='interrupted'||e.error==='canceled')return;
+    playing=false;releaseWake();updateBar();toast('朗讀中斷，請再按播放')};
+  synth.speak(u);
+}
+function play(){
+  if(!doc){$('file').click();return}
+  playing=true;synth.cancel();updateBar();highlight(true);requestWake();
+  setTimeout(speakCurrent,60);
+}
+function stop(){playing=false;token++;synth.cancel();releaseWake();updateBar()}
+function jump(i){
+  if(!flat.length)return;
+  idx=Math.max(0,Math.min(flat.length-1,i));savePos();highlight(true);updateBar();
+  if(playing){token++;synth.cancel();setTimeout(speakCurrent,60)}
+}
+async function requestWake(){try{if('wakeLock' in navigator&&!wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>wakeLock=null)}}catch(e){}}
+function releaseWake(){try{wakeLock&&wakeLock.release()}catch(e){}wakeLock=null}
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){if(playing){stop();toast('已暫停')}}
+  else if(playing)requestWake();
+});
+
+/* ---------- 讀檔 ---------- */
+function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=()=>no(new Error('載入失敗，請檢查網路'));document.head.appendChild(s)})}
+async function readPdf(buf){
+  if(!window.pdfjsLib){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'}
+  const pdf=await pdfjsLib.getDocument({data:buf,cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',cMapPacked:true,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'}).promise;
+  let out='';
+  for(let i=1;i<=pdf.numPages;i++){
+    toast('讀取第 '+i+' / '+pdf.numPages+' 頁…',60000);
+    const tc=await (await pdf.getPage(i)).getTextContent();
+    let lastY=null,line='';
+    for(const it of tc.items){
+      if(!('str' in it))continue;
+      const y=it.transform[5];
+      if(lastY!==null&&Math.abs(y-lastY)>(it.height||10)*0.5){out+=line+'\n';line=''}
+      line+=it.str;lastY=y;
+      if(it.hasEOL){out+=line+'\n';line='';lastY=null}
+    }
+    out+=line+'\n\f';
+  }
+  return out;
+}
+async function readDocx(buf){
+  if(!window.JSZip)await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  const zip=await JSZip.loadAsync(buf);
+  const xml=await zip.file('word/document.xml').async('string');
+  const d=new DOMParser().parseFromString(xml,'application/xml');
+  const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const ps=d.getElementsByTagNameNS(W,'p');let out='';
+  for(const p of ps){
+    let t='';
+    for(const n of p.getElementsByTagNameNS('*','*')){
+      if(n.namespaceURI!==W)continue;
+      if(n.localName==='t')t+=n.textContent;else if(n.localName==='tab')t+=' ';else if(n.localName==='br')t+='\n';
+    }
+    out+=t+'\n\n';
+  }
+  return out;
+}
+function decodeText(buf){
+  let t=new TextDecoder('utf-8').decode(buf);
+  const bad=(t.match(/�/g)||[]).length;
+  if(bad>5){try{const b=new TextDecoder('big5').decode(buf);if((b.match(/�/g)||[]).length<bad)t=b}catch(e){}}
+  return t;
+}
+async function openFile(f){
+  if(!f)return;
+  const name=f.name.replace(/\.[^.]+$/,'');
+  const ext=(f.name.split('.').pop()||'').toLowerCase();
+  try{
+    toast('讀取中…',60000);
+    const buf=await f.arrayBuffer();
+    const head=new Uint8Array(buf.slice(0,4));
+    let text;
+    if(ext==='pdf'||(head[0]===0x25&&head[1]===0x50))text=await readPdf(buf);
+    else if(ext==='docx'||(head[0]===0x50&&head[1]===0x4b))text=await readDocx(buf);
+    else if(ext==='doc'){toast('舊版 .doc 不支援，請先另存成 .docx 或 PDF',4000);return}
+    else{text=decodeText(buf);if(/^(html?)$/.test(ext))text=new DOMParser().parseFromString(text,'text/html').body.innerText}
+    $('toast').style.display='none';
+    setDoc(name,text,false);
+  }catch(e){console.error(e);toast('打不開這個檔案：'+(e.message||e),4000)}
+}
+
+/* ---------- 對話框 ---------- */
+function openPaste(){$('openDlg').close();$('pasteTxt').value='';$('pasteDlg').showModal()}
+$('openBtn').onclick=()=>$('openDlg').showModal();
+$('openClose').onclick=()=>$('openDlg').close();
+$('pickFile').onclick=()=>{$('openDlg').close();$('file').click()};
+$('pasteBtn').onclick=openPaste;
+$('pasteCancel').onclick=()=>$('pasteDlg').close();
+$('pasteOk').onclick=()=>{const t=$('pasteTxt').value;if(!t.trim())return;$('pasteDlg').close();
+  const first=t.trim().split('\n')[0].slice(0,20);setDoc('貼上：'+first,t,false)};
+$('file').onchange=e=>{openFile(e.target.files[0]);e.target.value=''};
+
+function fillVoices(){
+  const vs=synth.getVoices();const sel=$('voice');
+  const zh=vs.filter(v=>/^zh/i.test(v.lang)),other=vs.filter(v=>!/^zh/i.test(v.lang));
+  const cur=pickVoice();
+  const label=v=>v.name+'（'+({'zh-TW':'台灣','zh-CN':'中國','zh-HK':'香港'}[v.lang.replace('_','-')]||v.lang)+'）';
+  sel.innerHTML='';
+  [...zh,...other].forEach(v=>{const o=document.createElement('option');o.value=v.voiceURI;o.textContent=label(v);if(cur&&v.voiceURI===cur.voiceURI)o.selected=true;sel.appendChild(o)});
+  if(!vs.length)sel.innerHTML='<option>使用預設聲音</option>';
+}
+$('setBtn').onclick=()=>{fillVoices();$('font').value=String(fontSize);$('setDlg').showModal()};
+$('setClose').onclick=()=>$('setDlg').close();
+$('voice').onchange=e=>{voiceURI=e.target.value;LS.set('ra_voice',voiceURI);
+  if(playing){token++;synth.cancel();setTimeout(speakCurrent,60)}
+  else{const u=new SpeechSynthesisUtterance('這是目前的聲音');const v=pickVoice();if(v){u.voice=v;u.lang=v.lang}u.rate=rate;synth.cancel();synth.speak(u)}};
+$('font').onchange=e=>{fontSize=+e.target.value;LS.set('ra_font',fontSize);updateBar();highlight(true)};
+if(synth)synth.onvoiceschanged=()=>{if($('setDlg').open)fillVoices()};
+
+/* ---------- 控制 ---------- */
+$('play').onclick=()=>playing?stop():play();
+$('prev').onclick=()=>jump(idx-1);
+$('next').onclick=()=>jump(idx+1);
+$('seek').oninput=e=>{idx=+e.target.value;highlight(true);updateBar()};
+$('seek').onchange=e=>jump(+e.target.value);
+function setRate(r){rate=Math.round(Math.max(0.5,Math.min(2.5,r))*10)/10;LS.set('ra_rate',rate);updateBar();if(playing){token++;synth.cancel();setTimeout(speakCurrent,60)}}
+$('slower').onclick=()=>setRate(rate-0.1);
+$('faster').onclick=()=>setRate(rate+0.1);
+$('text').onclick=e=>{const s=e.target.closest('s');if(s)jump(+s.dataset.i)};
+
+if(!synth){toast('這個瀏覽器不支援朗讀',5000)}
+const saved=LS.get('ra_doc',null);
+if(saved&&saved.text){setDoc(saved.name,saved.text,true)}else render();
+</script>
+</body>
+</html>
