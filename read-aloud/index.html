@@ -276,6 +276,94 @@ async function readDocx(buf){
   }
   return out;
 }
+/* ---------- 有密碼的 Word（Office 2007 以後的加密格式），全部在手機上解 ---------- */
+const OLD_DOC='舊版 .doc 不支援，請先在 Word 另存成 .docx 或 PDF';
+const cat=(...a)=>{const n=a.reduce((x,y)=>x+y.length,0),o=new Uint8Array(n);let p=0;for(const x of a){o.set(x,p);p+=x.length}return o};
+const le32=i=>new Uint8Array([i&255,(i>>>8)&255,(i>>>16)&255,(i>>>24)&255]);
+const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const utf16=s=>{const o=new Uint8Array(s.length*2);for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);o[2*i]=c&255;o[2*i+1]=c>>8}return o};
+const HASH={SHA1:'SHA-1','SHA-1':'SHA-1',SHA256:'SHA-256',SHA384:'SHA-384',SHA512:'SHA-512'};
+async function dig(alg,data){return new Uint8Array(await crypto.subtle.digest(alg,data))}
+async function spin(alg,salt,pw,count){
+  let h=await dig(alg,cat(salt,utf16(pw)));
+  const buf=new Uint8Array(4+h.length);
+  for(let i=0;i<count;i++){buf[0]=i&255;buf[1]=(i>>>8)&255;buf[2]=(i>>>16)&255;buf[3]=i>>>24;buf.set(h,4);h=await dig(alg,buf)}
+  return h;
+}
+// AES-CBC 解密不含補位的資料（WebCrypto 只收有 PKCS7 補位的，所以自己補一塊）
+async function aesKey(raw){return crypto.subtle.importKey('raw',raw,'AES-CBC',false,['encrypt','decrypt'])}
+async function cbcRaw(key,iv,data){
+  const last=data.slice(data.length-16);
+  const pad=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CBC',iv:last},key,new Uint8Array(16).fill(16))).slice(0,16);
+  return new Uint8Array(await crypto.subtle.decrypt({name:'AES-CBC',iv},key,cat(data,pad)));
+}
+async function ecbRaw(key,data){
+  const p=await cbcRaw(key,new Uint8Array(16),data);
+  for(let i=p.length-1;i>=16;i--)p[i]^=data[i-16];
+  return p;
+}
+const isZip=u=>u[0]===0x50&&u[1]===0x4b;
+async function decryptAgile(info,pkg,pw){
+  const xml=new DOMParser().parseFromString(new TextDecoder().decode(info.slice(8)),'application/xml');
+  const kd=xml.getElementsByTagNameNS('*','keyData')[0];
+  const ek=[...xml.getElementsByTagNameNS('*','encryptedKey')].find(e=>e.getAttribute('spinCount'));
+  const alg=HASH[ek.getAttribute('hashAlgorithm')],kalg=HASH[kd.getAttribute('hashAlgorithm')];
+  const keyBytes=+ek.getAttribute('keyBits')/8,salt=b64(ek.getAttribute('saltValue'));
+  const h=await spin(alg,salt,pw,+ek.getAttribute('spinCount'));
+  let k=await dig(alg,cat(h,new Uint8Array([0x14,0x6e,0x0b,0xe7,0xab,0xac,0xd0,0xd6])));
+  if(k.length<keyBytes)k=cat(k,new Uint8Array(keyBytes-k.length).fill(0x36));
+  const secret=(await cbcRaw(await aesKey(k.slice(0,keyBytes)),salt,b64(ek.getAttribute('encryptedKeyValue')))).slice(0,+kd.getAttribute('keyBits')/8);
+  const key=await aesKey(secret),ksalt=b64(kd.getAttribute('saltValue')),bs=+kd.getAttribute('blockSize');
+  const size=new DataView(pkg.buffer,pkg.byteOffset).getUint32(0,true),data=pkg.subarray(8);
+  const out=new Uint8Array(size);
+  for(let i=0,off=0;off<size;i++,off+=4096){
+    const seg=data.subarray(off,Math.min(off+4096,data.length));
+    const iv=(await dig(kalg,cat(ksalt,le32(i)))).slice(0,bs);
+    const dec=await cbcRaw(key,iv,seg);
+    if(i===0&&!isZip(dec))return null; // 密碼錯
+    out.set(dec.subarray(0,Math.min(dec.length,size-off)),off);
+    if(i%50===0)toast('解鎖中… '+Math.round(off/size*100)+'%',60000);
+  }
+  return out;
+}
+async function decryptStandard(info,pkg,pw){
+  const dv=new DataView(info.buffer,info.byteOffset,info.byteLength);
+  const hsz=dv.getUint32(8,true),keyBits=dv.getUint32(12+16,true)||128;
+  let o=12+hsz;const saltSize=dv.getUint32(o,true);
+  const salt=info.slice(o+4,o+4+saltSize);o+=4+saltSize;
+  const ev=info.slice(o,o+16),evh=info.slice(o+20,o+52);
+  const h=await spin('SHA-1',salt,pw,50000);
+  const hf=await dig('SHA-1',cat(h,le32(0)));
+  const b1=new Uint8Array(64).fill(0x36),b2=new Uint8Array(64).fill(0x5c);
+  for(let i=0;i<20;i++){b1[i]^=hf[i];b2[i]^=hf[i]}
+  const kd=cat(await dig('SHA-1',b1),await dig('SHA-1',b2)).slice(0,keyBits/8);
+  const key=await aesKey(kd);
+  const v=await ecbRaw(key,ev),vh=(await ecbRaw(key,evh)).slice(0,20),want=await dig('SHA-1',v);
+  if(want.some((x,i)=>x!==vh[i]))return null;
+  const size=new DataView(pkg.buffer,pkg.byteOffset).getUint32(0,true);
+  toast('解鎖中…',60000);
+  return (await ecbRaw(key,pkg.subarray(8))).slice(0,size);
+}
+async function unlockOffice(buf){
+  if(!window.CFB)await loadScript('https://cdn.jsdelivr.net/npm/cfb@1.2.2/dist/cfb.min.js');
+  const cfb=CFB.read(new Uint8Array(buf),{type:'array'});
+  const ei=CFB.find(cfb,'EncryptionInfo'),ep=CFB.find(cfb,'EncryptedPackage');
+  if(!ei||!ep){toast(OLD_DOC,5000);return null}
+  const info=Uint8Array.from(ei.content),pkg=Uint8Array.from(ep.content);
+  const ver=info[0]+'.'+info[2];
+  let wrong=false;
+  for(;;){
+    const pw=await askPassword(wrong,'Word');
+    if(pw==null){toast('已取消');return null}
+    toast('解鎖中…',60000);
+    let out;
+    if(ver==='4.4')out=await decryptAgile(info,pkg,pw);
+    else if(info[2]===2)out=await decryptStandard(info,pkg,pw);
+    else{toast('這種加密方式不支援，請在 Word 移除密碼或另存成 PDF',6000);return null}
+    if(out&&isZip(out))return out.buffer;
+    wrong=true;
+  }
+}
 function decodeText(buf){
   let t=new TextDecoder('utf-8').decode(buf);
   const bad=(t.match(/�/g)||[]).length;
@@ -292,7 +380,10 @@ async function openFile(f){
     const head=new Uint8Array(buf.slice(0,4));
     let text;
     if(ext==='pdf'||(head[0]===0x25&&head[1]===0x50))text=await readPdf(buf);
-    else if(head[0]===0xD0&&head[1]===0xCF&&ext!=='txt'){toast(ext==='doc'?'舊版 .doc 不支援，請先另存成 .docx 或 PDF':'這份 Word 有設密碼，網頁打不開。請在電腦的 Word 移除密碼，或另存成 PDF（PDF 可以設密碼）',6000);return}
+    else if(head[0]===0xD0&&head[1]===0xCF&&ext!=='txt'){
+      const plain=await unlockOffice(buf);if(!plain)return;
+      text=await readDocx(plain);
+    }
     else if(ext==='docx'||(head[0]===0x50&&head[1]===0x4b))text=await readDocx(buf);
     else if(ext==='doc'){toast('舊版 .doc 不支援，請先另存成 .docx 或 PDF',4000);return}
     else{text=decodeText(buf);if(/^(html?)$/.test(ext))text=new DOMParser().parseFromString(text,'text/html').body.innerText}
@@ -302,8 +393,8 @@ async function openFile(f){
 }
 
 /* ---------- 對話框 ---------- */
-function askPassword(wrong){
-  return new Promise(ok=>{const d=$('pwDlg');$('pwMsg').textContent=wrong?'密碼不對，請再試一次':'這份 PDF 有設密碼';$('pwIn').value='';
+function askPassword(wrong,kind='PDF'){
+  return new Promise(ok=>{const d=$('pwDlg');$('pwMsg').textContent=wrong?'密碼不對，請再試一次':'這份 '+kind+' 有設密碼';$('pwIn').value='';
     $('toast').style.display='none';
     $('pwOk').onclick=()=>{d.close();ok($('pwIn').value)};$('pwCancel').onclick=()=>{d.close();ok(null)};
     $('pwIn').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('pwOk').click()}};
