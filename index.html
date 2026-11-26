@@ -13,6 +13,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"Pi
   padding:calc(24px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
 main{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
 h1{font-size:24px;margin:0 0 8px}
+h2{font-size:14px;font-weight:600;color:var(--muted);margin:14px 4px 0;letter-spacing:.05em}
 a.tool{display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;color:var(--fg);text-decoration:none}
 a.tool:active{border-color:var(--accent)}
 a.tool b{font-size:20px}
@@ -22,13 +23,16 @@ a.tool span{font-size:14px;color:var(--muted)}
 <body>
 <main>
   <h1>我的工具</h1>
-  <!-- 新工具加在這裡 -->
+  <!-- 新工具：加到符合的分類下（或新增 h2 分類），每個分類最新的放最上面 -->
+  <h2>上課筆記</h2>
   <a class="tool" href="page-notes/"><b>逐頁筆記</b><span>開啟 PDF 投影片，在每一頁旁邊寫筆記，自動暫存、可多檔切換，寫完輸出成 Word</span></a>
-  <a class="tool" href="pdf-notes/"><b>PDF 註解整理</b><span>把寫在 PDF 上的畫重點、便利貼、文字框抽出來，排成上面投影片、下面逐條註解的 Word</span></a>
   <a class="tool" href="slide-notes/"><b>投影片筆記</b><span>上課的 PDF 投影片一次排進 Word，自動調好大小、留好打筆記的空間</span></a>
-  <a class="tool" href="fluid-art/"><b>流動畫</b><span>倒顏料、用吹風吹開，做出海浪、大理石、細胞紋的流體畫</span></a>
-  <a class="tool" href="remote-camera/"><b>遙控相機</b><span>一支手機當相機、一支當遙控器，遠端看畫面、拍照和錄影</span></a>
+  <a class="tool" href="pdf-notes/"><b>PDF 註解整理</b><span>把寫在 PDF 上的畫重點、便利貼、文字框抽出來，排成上面投影片、下面逐條註解的 Word</span></a>
+  <h2>生活小工具</h2>
   <a class="tool" href="voice-note/"><b>行車語音筆記</b><span>大麥克風鍵 + 大倒退鍵，說完分享到 Keep</span></a>
+  <a class="tool" href="remote-camera/"><b>遙控相機</b><span>一支手機當相機、一支當遙控器，遠端看畫面、拍照和錄影</span></a>
+  <h2>創作</h2>
+  <a class="tool" href="fluid-art/"><b>流動畫</b><span>倒顏料、用吹風吹開，做出海浪、大理石、細胞紋的流體畫</span></a>
 </main>
 </body>
 </html>
