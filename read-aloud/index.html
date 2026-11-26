@@ -27,6 +27,13 @@ header button{padding:9px 12px;font-size:15px;white-space:nowrap}
 #pwList div span{flex:1;letter-spacing:.1em}
 #pwList button{padding:6px 12px;font-size:14px}
 #pwList p{margin:0;font-size:14px;color:var(--muted)}
+#text h4.pg{margin:1.4em 0 .6em;font-size:14px;font-weight:600;color:var(--muted);border-top:1px solid var(--line);padding-top:.6em;cursor:pointer}
+#text h4.pg:first-child{margin-top:0}
+#pageGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-height:55vh;overflow-y:auto}
+#pageGrid button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px;text-align:left}
+#pageGrid button b{font-size:17px}
+#pageGrid button span{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+#pageGrid button.on{border-color:var(--accent);background:#1d3350}
 .empty{color:var(--muted);font-size:17px;line-height:1.7;padding-top:8vh;text-align:center}
 .empty b{display:block;color:var(--fg);font-size:22px;margin-bottom:12px}
 .empty .big{margin-top:24px;padding:18px 28px;font-size:20px;background:var(--accent);border-color:var(--accent);color:#fff}
@@ -58,6 +65,7 @@ dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
 <body>
 <header>
   <div class="name" id="name">文件朗讀</div>
+  <button id="pageBtn" hidden>頁</button>
   <button id="openBtn">開啟</button>
   <button id="setBtn" aria-label="設定">設定</button>
 </header>
@@ -89,6 +97,14 @@ dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
   <div class="row"><button id="pasteCancel">取消</button><button class="ok" id="pasteOk">開始</button></div>
 </dialog>
 
+<dialog id="pageDlg">
+  <h3>選擇頁面，點了就從那頁開始唸</h3>
+  <label for="afterPage1" style="margin-top:0">每頁唸完後</label>
+  <select id="afterPage1" class="afterPage" style="margin-bottom:12px"><option value="next">自動唸下一頁</option><option value="stop">停止</option></select>
+  <div id="pageGrid"></div>
+  <div class="row"><button class="ok" id="pageClose">關閉</button></div>
+</dialog>
+
 <dialog id="setDlg">
   <h3>設定</h3>
   <label for="voice">聲音</label>
@@ -96,6 +112,8 @@ dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
   <label>記住的密碼（開有密碼的檔案時自動先試）</label>
   <div id="pwList"></div>
   <div style="display:flex;gap:8px;margin-top:8px"><input id="pwAdd" type="password" autocomplete="off" placeholder="新增密碼" style="flex:1;min-width:0;font:inherit;font-size:16px;padding:10px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px"><button id="pwAddBtn" style="padding:10px 16px">新增</button></div>
+  <label for="afterPage2">每頁唸完後</label>
+  <select id="afterPage2" class="afterPage"><option value="next">自動唸下一頁</option><option value="stop">停止</option></select>
   <label for="font">字體大小</label>
   <select id="font"><option value="17">小</option><option value="20">中</option><option value="24">大</option><option value="28">特大</option></select>
   <p class="note">朗讀時螢幕會保持亮著；鎖螢幕或切到別的 App，朗讀會停，回來按播放即可從原處繼續。<br>想要更自然的聲音：iPhone 設定 → 輔助使用 → 朗讀內容 → 聲音 → 中文（台灣），下載「增強版」或「高品質」聲音，再回這裡選。</p>
@@ -118,6 +136,7 @@ const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.par
 let doc=null;          // {name, paras:[[sentence,...],...]}
 let flat=[];           // [{p,s,text}]
 let idx=0, playing=false, token=0, wakeLock=null;
+let onlyPage=LS.get('ra_onlypage',false);
 let rate=LS.get('ra_rate',1.0), voiceURI=LS.get('ra_voice',''), fontSize=LS.get('ra_font',20);
 
 function toast(m,ms=2500){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',ms)}
@@ -160,11 +179,14 @@ function cleanText(raw){
   return paras;
 }
 function setDoc(name,text,restore){
-  const paras=cleanText(text).map(splitSentences).filter(p=>p.length);
+  // \f 是分頁符號：PDF 每頁、Word 的分頁位置
+  const paras=[],pp=[];
+  text.split('\f').forEach((pg,i)=>cleanText(pg).map(splitSentences).forEach(p=>{if(p.length){paras.push(p);pp.push(i+1)}}));
   if(!paras.length){toast('這份文件找不到可以朗讀的文字（可能是掃描圖片）',4000);return}
   stop();
-  doc={name,paras};flat=[];
-  paras.forEach((p,pi)=>p.forEach((s,si)=>flat.push({p:pi,s:si,text:s})));
+  const nPages=text.split('\f').filter(x=>x.trim()).length>1?pp[pp.length-1]:1;
+  doc={name,paras,pp,nPages};flat=[];
+  paras.forEach((p,pi)=>p.forEach((s,si)=>flat.push({p:pi,s:si,pg:pp[pi],text:s})));
   const key=docKey();
   idx=restore?Math.min(LS.get('ra_pos',{})[key]||0,flat.length-1):(LS.get('ra_pos',{})[key]||0);
   if(idx>=flat.length)idx=0;
@@ -184,7 +206,10 @@ function render(){
     updateBar();return;
   }
   const frag=document.createDocumentFragment();let n=0;
-  doc.paras.forEach(p=>{const el=document.createElement('p');p.forEach(s=>{const sp=document.createElement('s');sp.textContent=s;sp.dataset.i=n++;el.appendChild(sp)});frag.appendChild(el)});
+  let lastPg=0;
+  doc.paras.forEach((p,pi)=>{
+    if(doc.nPages>1&&doc.pp[pi]!==lastPg){lastPg=doc.pp[pi];const h=document.createElement('h4');h.className='pg';h.dataset.page=lastPg;h.textContent='第 '+lastPg+' 頁';frag.appendChild(h)}
+    const el=document.createElement('p');p.forEach(s=>{const sp=document.createElement('s');sp.textContent=s;sp.dataset.i=n++;el.appendChild(sp)});frag.appendChild(el)});
   box.innerHTML='';box.appendChild(frag);
   box.scrollTop=0;
   highlight(true);updateBar();
@@ -200,6 +225,8 @@ function updateBar(){
   $('pos').textContent=n?(idx+1)+' / '+n:'0 / 0';
   $('pct').textContent=n?Math.round(idx/Math.max(1,n-1)*100)+'%':'0%';
   $('seek').max=Math.max(0,n-1);$('seek').value=idx;
+  const pb=$('pageBtn');pb.hidden=!(doc&&doc.nPages>1);
+  if(doc&&flat[idx])pb.textContent='第 '+flat[idx].pg+' 頁'+(onlyPage?'・唸完停':'');
   $('rateTxt').textContent=rate.toFixed(1)+' 倍';
   $('playTxt').textContent=playing?'暫停':'播放';
   $('playIcon').innerHTML=playing?'<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>':'<path d="M8 5v14l11-7z"/>';
@@ -219,6 +246,7 @@ function speakCurrent(){
   const v=pickVoice();if(v){u.voice=v;u.lang=v.lang}else u.lang='zh-TW';
   u.rate=rate;
   u.onend=()=>{if(my!==token||!playing)return;
+    if(onlyPage&&idx<flat.length-1&&flat[idx+1].pg!==flat[idx].pg){idx++;savePos();highlight(true);playing=false;releaseWake();updateBar();toast('這一頁唸完了');return}
     if(idx<flat.length-1){idx++;savePos();highlight(true);updateBar();speakCurrent()}
     else{playing=false;releaseWake();updateBar();toast('唸完了')}};
   u.onerror=e=>{if(my!==token)return;if(e.error==='interrupted'||e.error==='canceled')return;
@@ -282,7 +310,9 @@ async function readDocx(buf){
     let t='';
     for(const n of p.getElementsByTagNameNS('*','*')){
       if(n.namespaceURI!==W)continue;
-      if(n.localName==='t')t+=n.textContent;else if(n.localName==='tab')t+=' ';else if(n.localName==='br')t+='\n';
+      if(n.localName==='t')t+=n.textContent;else if(n.localName==='tab')t+=' ';
+      else if(n.localName==='lastRenderedPageBreak')t+='\f';
+      else if(n.localName==='br')t+=(n.getAttributeNS(W,'type')==='page')?'\f':'\n';
     }
     out+=t+'\n\n';
   }
@@ -444,7 +474,7 @@ function fillVoices(){
   if(!vs.length)sel.innerHTML='<option>使用預設聲音</option>';
 }
 $('pwAddBtn').onclick=()=>{const v=$('pwAdd').value;if(!v)return;rememberPw(v);$('pwAdd').value='';renderPwList();toast('已記住')};
-$('setBtn').onclick=()=>{fillVoices();renderPwList();$('font').value=String(fontSize);$('setDlg').showModal()};
+$('setBtn').onclick=()=>{fillVoices();syncAfter();renderPwList();$('font').value=String(fontSize);$('setDlg').showModal()};
 $('setClose').onclick=()=>$('setDlg').close();
 $('voice').onchange=e=>{voiceURI=e.target.value;LS.set('ra_voice',voiceURI);
   if(playing){token++;synth.cancel();setTimeout(speakCurrent,60)}
@@ -461,7 +491,22 @@ $('seek').onchange=e=>jump(+e.target.value);
 function setRate(r){rate=Math.round(Math.max(0.5,Math.min(2.5,r))*10)/10;LS.set('ra_rate',rate);updateBar();if(playing){token++;synth.cancel();setTimeout(speakCurrent,60)}}
 $('slower').onclick=()=>setRate(rate-0.1);
 $('faster').onclick=()=>setRate(rate+0.1);
-$('text').onclick=e=>{const s=e.target.closest('s');if(s)jump(+s.dataset.i)};
+function pageStart(pg){return flat.findIndex(f=>f.pg>=pg)}
+function startAt(i){if(i<0)return;if(playing)jump(i);else{jump(i);play()}}
+$('text').onclick=e=>{const s=e.target.closest('s');if(s)return startAt(+s.dataset.i);
+  const h=e.target.closest('h4.pg');if(h)startAt(pageStart(+h.dataset.page))};
+$('pageBtn').onclick=()=>{
+  const g=$('pageGrid');g.innerHTML='';const cur=flat[idx]?flat[idx].pg:1;
+  const seen=new Set();
+  flat.forEach((f,i)=>{if(seen.has(f.pg))return;seen.add(f.pg);
+    const b=document.createElement('button');if(f.pg===cur)b.className='on';
+    const t=document.createElement('b');t.textContent='第 '+f.pg+' 頁';const sn=document.createElement('span');sn.textContent=f.text.slice(0,24);
+    b.append(t,sn);b.onclick=()=>{$('pageDlg').close();startAt(i)};g.appendChild(b)});
+  syncAfter();$('pageDlg').showModal();
+  const on=g.querySelector('.on');if(on)on.scrollIntoView({block:'center'})};
+function syncAfter(){document.querySelectorAll('.afterPage').forEach(x=>x.value=onlyPage?'stop':'next')}
+document.querySelectorAll('.afterPage').forEach(x=>x.onchange=e=>{onlyPage=e.target.value==='stop';LS.set('ra_onlypage',onlyPage);syncAfter();updateBar()});
+$('pageClose').onclick=()=>$('pageDlg').close();
 
 if(!synth){toast('這個瀏覽器不支援朗讀',5000)}
 const saved=LS.get('ra_doc',null);
