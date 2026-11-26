@@ -145,7 +145,7 @@ async function load(files){
   for(const f of pdfs){
     if(!firstName)firstName=f.name.replace(/\.pdf$/i,'');
     try{
-      const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;
+      const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer(),cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',cMapPacked:true,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/'}).promise;
       if(pdfs.length>1||slides.length)addHeader(f.name);
       for(let i=1;i<=pdf.numPages;i++){
         $('status').textContent=`讀取 ${f.name}：${i} / ${pdf.numPages}`;
