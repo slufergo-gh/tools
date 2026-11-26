@@ -36,6 +36,20 @@ button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)
 .th.off::after{content:"略過";position:absolute;inset:auto 4px 4px auto;background:#c0392b;color:#fff;font-size:12px;padding:1px 6px;border-radius:6px}
 .hint{font-size:13px;color:var(--muted);margin:0}
 .file{font-size:13px;color:var(--fg);margin:12px 0 6px;grid-column:1/-1}
+.tabs{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px}
+.tabs button{background:transparent;color:var(--muted);font-weight:500;font-size:14px;padding:8px 14px;border-radius:9px}
+.tabs button.on{background:var(--accent);color:#fff}
+#pages{display:grid;gap:18px 14px;justify-items:center}
+.pgwrap{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.pg{position:relative;background:#fff;box-shadow:0 2px 10px rgba(0,0,0,.5);overflow:hidden;color:#000}
+.blk{position:absolute;line-height:1.25}
+.blk img{display:inline-block;vertical-align:top}
+.blk img.bd{outline:1px solid #a6a6a6}
+.blk.head{font-weight:700}
+.cap{color:#7f7f7f}
+.lines{background-image:linear-gradient(to bottom,transparent calc(100% - 1px),#e6eaee calc(100% - 1px))}
+.row2{display:flex;gap:0;border-bottom:1px solid #d9d9d9;box-sizing:border-box}
+.row2>div:first-child img{display:block}
 </style>
 </head>
 <body>
@@ -80,13 +94,14 @@ button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)
 
   <section class="panel" id="previewBox" hidden>
     <div class="row" style="justify-content:space-between;margin-bottom:10px">
-      <p class="hint">點縮圖可略過不要的頁面</p>
+      <div class="tabs"><button id="tabPick" class="on">選擇頁面</button><button id="tabPrev">Word 預覽</button></div>
       <div class="row">
         <button class="ghost" id="allOn">全選</button>
         <button class="ghost" id="clear">清除檔案</button>
       </div>
     </div>
-    <div id="thumbs"></div>
+    <div id="thumbsWrap"><p class="hint" style="margin-bottom:10px">點縮圖可略過不要的頁面</p><div id="thumbs"></div></div>
+    <div id="pagesWrap" hidden><p class="hint" style="margin-bottom:10px"><b id="pageCount"></b>　調整上面的設定會即時更新。淡灰線是留給你打筆記的空白，Word 裡不會有線。實際分頁可能和 Word 差一兩行。</p><div id="pages"></div></div>
   </section>
 
   <div class="row">
@@ -112,7 +127,7 @@ function save(){const s={};keys.forEach(k=>{const el=$(k);s[k]=el.type==='checkb
 function syncUI(){$('wv').textContent=$('width').value+'%';
   const l=$('layout').value;$('linesBox').style.display=(l==='stack'||l==='side')?'':'none';
   $('linesBox').firstChild.textContent=l==='side'?'右側筆記欄的空行':'每張下面的筆記空行';}
-keys.forEach(k=>$(k).addEventListener('input',()=>{syncUI();save();}));
+keys.forEach(k=>$(k).addEventListener('input',()=>{syncUI();save();renderPreview();}));
 syncUI();
 
 // ---------- loading ----------
@@ -168,13 +183,20 @@ function addThumb(s){
   const sp=document.createElement('span');sp.textContent=s.page;
   d.append(img,sp);
   d.onclick=()=>{s.on=!s.on;d.classList.toggle('off',!s.on);updateStatus();};
+  s.url=img.src;
   s.el=d;$('thumbs').appendChild(d);
 }
 function updateStatus(){
   const n=slides.filter(s=>s.on).length;
   $('status').textContent=slides.length?`共 ${slides.length} 頁，將放入 ${n} 頁`:'';
   $('go').disabled=!n;
+  renderPreview();
 }
+function setTab(prev){$('tabPrev').classList.toggle('on',prev);$('tabPick').classList.toggle('on',!prev);
+  $('pagesWrap').hidden=!prev;$('thumbsWrap').hidden=prev;try{localStorage.setItem('slideNotesTab',prev?'1':'');}catch(e){}renderPreview();}
+$('tabPick').onclick=()=>setTab(false);$('tabPrev').onclick=()=>setTab(true);
+window.addEventListener('resize',renderPreview);
+try{if(localStorage.getItem('slideNotesTab'))setTab(true);}catch(e){}
 $('allOn').onclick=()=>{slides.forEach(s=>{s.on=true;s.el.classList.remove('off');});updateStatus();};
 $('clear').onclick=()=>{slides.forEach(s=>URL.revokeObjectURL(s.el.querySelector('img').src));
   slides.length=0;firstName='';$('thumbs').innerHTML='';$('previewBox').hidden=true;updateStatus();};
@@ -193,45 +215,131 @@ const P=(inner='',ppr='')=>`<w:p>${ppr?`<w:pPr>${ppr}</w:pPr>`:''}${inner}</w:p>
 const T=t=>`<w:r><w:rPr><w:color w:val="7F7F7F"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${esc(t)}</w:t></w:r>`;
 const blank=n=>P().repeat(Math.max(0,n));
 
-async function build(){
-  const o={layout:$('layout').value,width:+$('width').value/100,lines:+$('lines').value||0,border:$('border').checked,num:$('num').checked,paper:PAPERS[$('paper').value]};
+const LINE=366, CAP_H=280, HEAD_H=850; // 估計高度（twips）：12pt 行距 1.25、9pt 頁碼、標題 16pt＋段距
+function getOpts(){return {layout:$('layout').value,width:+$('width').value/100,lines:+$('lines').value||0,border:$('border').checked,num:$('num').checked,paper:PAPERS[$('paper').value]};}
+function plan(o){
   const [pw,ph]=o.paper, uw=pw-2*MARGIN, uh=ph-2*MARGIN;
   const list=slides.filter(s=>s.on);
   const multi=new Set(list.map(s=>s.file)).size>1;
-  const zip=new JSZip();
-  let body='',rels='',lastFile=null,pairStart=0;
   const label=s=>(multi?s.file.replace(/\.pdf$/i,'')+' – ':'')+'第 '+s.page+' 頁';
-
+  const B=[]; let lastFile=null,pairStart=0;
   list.forEach((s,i)=>{
-    const idx=i+1;
-    zip.file(`word/media/slide${idx}.jpg`,s.blob);
-    rels+=`<Relationship Id="img${idx}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/slide${idx}.jpg"/>`;
-    const ratio=s.h/s.w;
-    let wTw, cx, cy;
+    const idx=i+1, ratio=s.h/s.w;
     const newFile=multi&&s.file!==lastFile; lastFile=s.file;
-    let brk=i>0&&(newFile||o.layout==='page1'||(o.layout==='page2'&&i%2===0));
-    if(o.layout==='page2'&&newFile)pairStart=i;
-    if(o.layout==='page2')brk=i>0&&(newFile||(i-pairStart)%2===0);
-    const pb=()=>{if(brk){brk=false;return '<w:pageBreakBefore/>';}return '';};
-    const fileHead=newFile?P(`<w:r><w:t xml:space="preserve">${esc(s.file.replace(/\.pdf$/i,''))}</w:t></w:r>`,'<w:pStyle w:val="Heading1"/>'+pb()):'';
-
+    if(newFile)pairStart=i;
+    let brk=i>0&&(newFile||o.layout==='page1'||(o.layout==='page2'&&(i-pairStart)%2===0));
+    const take=()=>{const b=brk;brk=false;return b;};
+    if(newFile)B.push({t:'head',text:s.file.replace(/\.pdf$/i,''),brk:take()});
     if(o.layout==='side'){
       const leftTw=Math.round(uw*Math.min(o.width,0.75)), rightTw=uw-leftTw;
-      wTw=leftTw-120; cx=wTw*EMU_PER_TWIP; cy=Math.round(cx*ratio);
-      const cap=o.num?P(T(label(s))):'';
-      body+=fileHead+`<w:tbl><w:tblPr><w:tblW w:w="${uw}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="D9D9D9"/><w:bottom w:val="single" w:sz="4" w:color="D9D9D9"/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${leftTw}"/><w:gridCol w:w="${rightTw}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${leftTw}" w:type="dxa"/></w:tcPr>${cap}${P(picXml(idx,cx,cy,o.border))}</w:tc><w:tc><w:tcPr><w:tcW w:w="${rightTw}" w:type="dxa"/></w:tcPr>${P()}${blank(o.lines-1)}</w:tc></w:tr></w:tbl>`;
+      const cx=(leftTw-120)*EMU_PER_TWIP, cy=Math.round(cx*ratio);
+      B.push({t:'row',s,idx,cx,cy,leftTw,rightTw,lines:Math.max(1,o.lines),cap:o.num?label(s):null,border:o.border,brk:take()});
       return;
     }
-    wTw=uw*o.width; cx=Math.round(wTw*EMU_PER_TWIP); cy=Math.round(cx*ratio);
-    // keep slide within page height (minus room for caption)
+    let cx=Math.round(uw*o.width*EMU_PER_TWIP), cy=Math.round(cx*ratio);
     const maxH=(o.layout==='page2'?(uh/2-700):(uh-500))*EMU_PER_TWIP;
     if(cy>maxH){cy=Math.round(maxH);cx=Math.round(cy/ratio);}
     const second=o.layout==='page2'&&(i-pairStart)%2===1;
-    body+=fileHead;
-    if(o.num)body+=P(T(label(s)),'<w:keepNext/>'+pb()+(second?'<w:spacing w:before="240"/>':''));
-    body+=P(picXml(idx,cx,cy,o.border),pb()+'<w:spacing w:before="'+(second&&!o.num?240:60)+'" w:after="120"/><w:jc w:val="center"/>');
-    if(o.layout==='stack')body+=blank(o.lines);
-    else body+=blank(1);
+    if(o.num)B.push({t:'cap',text:label(s),brk:take(),before:second?240:0});
+    B.push({t:'pic',s,idx,cx,cy,border:o.border,brk:take(),before:second&&!o.num?240:60,after:120});
+    B.push({t:'blank',n:o.layout==='stack'?o.lines:1});
+  });
+  const L={B,pw,ph,uw,uh};
+  // 只剩筆記空行的頁面沒有用，把多出來的空行拿掉
+  paginate(L).forEach(pg=>{if(pg.every(x=>x.t==='blank'))pg.forEach(x=>x.src.n-=x.n);});
+  return L;
+}
+function blockH(b){
+  switch(b.t){
+    case 'head':return HEAD_H;
+    case 'cap':return CAP_H+b.before;
+    case 'pic':return b.cy/EMU_PER_TWIP+b.before+b.after;
+    case 'blank':return b.n*LINE;
+    case 'row':return Math.max((b.cap?CAP_H:0)+b.cy/EMU_PER_TWIP,b.lines*LINE)+160;
+  }
+}
+function blockXml(b){
+  const pb=b.brk?'<w:pageBreakBefore/>':'';
+  const picPr=(before,after)=>`<w:spacing w:before="${before}" w:after="${after}" w:line="240" w:lineRule="auto"/>`;
+  switch(b.t){
+    case 'head':return P(`<w:r><w:t xml:space="preserve">${esc(b.text)}</w:t></w:r>`,'<w:pStyle w:val="Heading1"/>'+pb);
+    case 'cap':return P(T(b.text),'<w:keepNext/>'+pb+(b.before?`<w:spacing w:before="${b.before}"/>`:''));
+    case 'pic':return P(picXml(b.idx,b.cx,b.cy,b.border),pb+picPr(b.before,b.after)+'<w:jc w:val="center"/>');
+    case 'blank':return blank(b.n);
+    case 'row':return `<w:tbl><w:tblPr><w:tblW w:w="${b.leftTw+b.rightTw}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders><w:insideH w:val="single" w:sz="4" w:color="D9D9D9"/><w:bottom w:val="single" w:sz="4" w:color="D9D9D9"/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="0" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${b.leftTw}"/><w:gridCol w:w="${b.rightTw}"/></w:tblGrid><w:tr><w:trPr><w:cantSplit/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${b.leftTw}" w:type="dxa"/></w:tcPr>${b.cap?P(T(b.cap)):''}${P(picXml(b.idx,b.cx,b.cy,b.border),picPr(0,0))}</w:tc><w:tc><w:tcPr><w:tcW w:w="${b.rightTw}" w:type="dxa"/></w:tcPr>${blank(b.lines)}</w:tc></w:tr></w:tbl>`;
+  }
+}
+
+// ---------- 預覽 ----------
+function paginate(L){
+  const pages=[[]]; let y=0;
+  const newPage=()=>{pages.push([]);y=0;};
+  L.B.forEach((b,k)=>{
+    if(b.brk&&pages[pages.length-1].length)newPage();
+    if(b.t==='blank'){
+      let n=b.n;
+      while(n>0){const fit=Math.floor((L.uh-y)/LINE);if(fit<=0){newPage();continue;}
+        const m=Math.min(fit,n);pages[pages.length-1].push({t:'blank',n:m,y,src:b});y+=m*LINE;n-=m;}
+      return;
+    }
+    const h=blockH(b);
+    let need=h; if(b.t==='cap'&&L.B[k+1])need+=blockH(L.B[k+1]);
+    if(b.t==='head'&&L.B[k+1])need+=Math.min(blockH(L.B[k+1]),L.uh/2);
+    if(y>0&&y+need>L.uh)newPage();
+    pages[pages.length-1].push({...b,y});y+=h;
+  });
+  return pages.filter(p=>p.length);
+}
+let previewQueued=false;
+function renderPreview(){
+  if(previewQueued)return;previewQueued=true;
+  requestAnimationFrame(()=>{previewQueued=false;drawPreview();});
+}
+function drawPreview(){
+  const box=$('pages'); if($('pagesWrap').hidden)return;
+  box.innerHTML='';
+  const o=getOpts(), L=plan(o);
+  if(!L.B.length){$('pageCount').textContent='沒有選到任何頁面';return;}
+  const pages=paginate(L);
+  const W=Math.min(L.pw>L.ph?360:260,box.clientWidth||260), sc=W/L.pw, px=t=>t*sc+'px';
+  box.style.gridTemplateColumns=`repeat(auto-fill,minmax(${W}px,1fr))`;
+  $('pageCount').textContent=`Word 大約 ${pages.length} 頁`;
+  const MAX=40;
+  pages.slice(0,MAX).forEach((items,pi)=>{
+    const wrap=document.createElement('div');wrap.className='pgwrap';
+    const pg=document.createElement('div');pg.className='pg';pg.style.width=W+'px';pg.style.height=px(L.ph);
+    items.forEach(b=>{
+      const el=document.createElement('div');el.className='blk';
+      el.style.left=px(MARGIN);el.style.top=px(MARGIN+b.y);el.style.width=px(L.uw);
+      const img=()=>{const im=new Image();im.src=b.s.url;im.style.width=px(b.cx/EMU_PER_TWIP);im.style.height=px(b.cy/EMU_PER_TWIP);if(b.border)im.className='bd';return im;};
+      if(b.t==='head'){el.className+=' head';el.style.fontSize=px(16*20);el.textContent=b.text;}
+      else if(b.t==='cap'){el.className+=' cap';el.style.fontSize=px(9*20);el.style.paddingTop=px(b.before);el.textContent=b.text;}
+      else if(b.t==='pic'){el.style.textAlign='center';el.style.paddingTop=px(b.before);el.appendChild(img());}
+      else if(b.t==='blank'){el.className+=' lines';el.style.height=px(b.n*LINE);el.style.backgroundSize=`100% ${px(LINE)}`;}
+      else if(b.t==='row'){el.className+=' row2';el.style.height=px(blockH(b));el.style.padding=px(80)+' 0';
+        const l=document.createElement('div');l.style.width=px(b.leftTw);
+        if(b.cap){const c=document.createElement('div');c.className='cap';c.style.fontSize=px(9*20);c.textContent=b.cap;l.appendChild(c);}
+        l.appendChild(img());
+        const r=document.createElement('div');r.className='lines';r.style.flex='1';r.style.height=px(b.lines*LINE);r.style.backgroundSize=`100% ${px(LINE)}`;
+        el.append(l,r);}
+      pg.appendChild(el);
+    });
+    const n=document.createElement('span');n.textContent=`第 ${pi+1} 頁`;
+    wrap.append(pg,n);box.appendChild(wrap);
+  });
+  if(pages.length>MAX){const d=document.createElement('p');d.className='hint';d.textContent=`…還有 ${pages.length-MAX} 頁`;box.appendChild(d);}
+}
+
+async function build(){
+  const o=getOpts(), L=plan(o), {pw,ph}=L;
+  const zip=new JSZip();
+  let body='',rels='';
+  L.B.forEach(b=>{
+    if(b.t==='pic'||b.t==='row'){
+      zip.file(`word/media/slide${b.idx}.jpg`,b.s.blob);
+      rels+=`<Relationship Id="img${b.idx}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/slide${b.idx}.jpg"/>`;
+    }
+    body+=blockXml(b);
   });
 
   const doc=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
