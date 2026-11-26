@@ -88,6 +88,7 @@ dialog p.note{font-size:13px;color:var(--muted);line-height:1.6;margin:10px 0 0}
     <button id="pasteBtn" style="padding:16px">貼上文字</button>
   </div>
   <p class="note">支援 PDF、Word（.docx）、純文字。檔案只在這支手機上讀取，不會上傳。<br>Gmail 附件：點開附件 → 分享 → 儲存到檔案，再從這裡選。</p>
+  <button id="delBtn" style="width:100%;margin-top:14px;padding:14px;color:#ff8a80;border-color:#5a2a2a">刪除目前的檔案</button>
   <div class="row"><button id="openClose">取消</button></div>
 </dialog>
 
@@ -457,6 +458,13 @@ function askPassword(wrong,kind='PDF'){
 function openPaste(){$('openDlg').close();$('pasteTxt').value='';$('pasteDlg').showModal()}
 $('openBtn').onclick=()=>$('openDlg').showModal();
 $('openClose').onclick=()=>$('openDlg').close();
+function resetDel(){const b=$('delBtn');b.dataset.arm='';b.textContent=doc?'刪除目前的檔案「'+doc.name+'」':'';b.hidden=!doc}
+$('openBtn').addEventListener('click',resetDel);
+$('delBtn').onclick=()=>{const b=$('delBtn');
+  if(!b.dataset.arm){b.dataset.arm='1';b.textContent='再按一次確認刪除';return}
+  stop();const m=LS.get('ra_pos',{});const pre=doc.name+'|';Object.keys(m).forEach(k=>{if(k.startsWith(pre))delete m[k]});LS.set('ra_pos',m);
+  try{localStorage.removeItem('ra_doc')}catch(e){}
+  doc=null;flat=[];idx=0;$('openDlg').close();render();toast('已從這支手機刪除（原始檔案不受影響）',3500)};
 $('pickFile').onclick=()=>{$('openDlg').close();$('file').click()};
 $('pasteBtn').onclick=openPaste;
 $('pasteCancel').onclick=()=>$('pasteDlg').close();
