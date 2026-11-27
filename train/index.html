@@ -51,6 +51,9 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
 .set p.hint{font-size:14px;color:var(--muted);line-height:1.6;margin:4px 0 14px}
 .set label{display:block;font-size:14px;color:var(--muted);margin:16px 2px 6px}
 .set select,.set input[type=text],.set input[type=number],.set input[type=password]{width:100%;padding:12px;font-size:17px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.set .two{display:grid;grid-template-columns:1fr 1.3fr;gap:8px}
+.set .two.eq{grid-template-columns:1fr 1fr}
+.set h2.sec{font-size:17px;margin:28px 0 0;padding-top:14px;border-top:1px solid var(--line)}
 .set .chk{display:flex;align-items:center;gap:10px;font-size:17px;color:var(--fg);margin-top:18px}
 .set .chk input{width:22px;height:22px;accent-color:var(--accent)}
 .set details{margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
@@ -88,18 +91,28 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
 <!-- 設定畫面 -->
 <section id="setup" class="set hidden">
   <h1>設定路線</h1>
-  <p class="hint">設定一次就好，之後打開就直接顯示。去程是「區間車 → 高鐵」，回程會自動反過來。</p>
+  <p class="hint">設定一次就好，之後打開就直接顯示，隨時可以按「設定」再改。</p>
 
-  <label for="sHome">我搭區間車的車站（台鐵）</label>
-  <input type="text" id="sHome" list="traList" placeholder="例如：豐原" autocomplete="off">
-  <datalist id="traList"></datalist>
+  <h2 class="sec">去程（區間車 → 高鐵）</h2>
+  <label>台鐵上車站</label>
+  <div class="two"><select id="gTraFromC"></select><select id="gTraFromS"></select></div>
+  <label>台鐵下車站（轉乘高鐵）</label>
+  <div class="two"><select id="gTraToC"></select><select id="gTraToS"></select></div>
+  <label>高鐵</label>
+  <div class="two eq"><select id="gThFrom"></select><select id="gThTo"></select></div>
 
-  <label for="sXfer">轉乘的高鐵站</label>
-  <select id="sXfer"></select>
+  <h2 class="sec">回程（高鐵 → 區間車）</h2>
+  <label class="chk"><input type="checkbox" id="sSame"> 回程就是去程反過來</label>
+  <div id="backBox">
+    <label>高鐵</label>
+    <div class="two eq"><select id="bThFrom"></select><select id="bThTo"></select></div>
+    <label>台鐵上車站（下高鐵後）</label>
+    <div class="two"><select id="bTraFromC"></select><select id="bTraFromS"></select></div>
+    <label>台鐵下車站</label>
+    <div class="two"><select id="bTraToC"></select><select id="bTraToS"></select></div>
+  </div>
 
-  <label for="sDest">高鐵要搭到</label>
-  <select id="sDest"></select>
-
+  <h2 class="sec">其他</h2>
   <label for="sBuf">轉乘預留時間（分鐘）</label>
   <input type="number" id="sBuf" min="0" max="60" inputmode="numeric">
 
@@ -195,11 +208,12 @@ function purgeCache() {
 }
 
 async function traStations() {
-  if (DEMO) return DEMO_TRA.map((n, i) => ({ id: String(1000 + i), name: n }));
-  return cached('traSt', 30 * 864e5, async () => {
+  if (DEMO) return DEMO_TRA.map(([n, c], i) => ({ id: String(1000 + i), name: n, city: norm(c) }));
+  return cached('traSt2', 30 * 864e5, async () => {
     const j = await tdx('/v3/Rail/TRA/Station');
     const arr = Array.isArray(j) ? j : (j.Stations || []);
-    return arr.map(s => ({ id: s.StationID, name: s.StationName && s.StationName.Zh_tw })).filter(s => s.id && s.name);
+    return arr.map(s => ({ id: s.StationID, name: s.StationName && s.StationName.Zh_tw,
+      city: norm(s.LocationCity || (s.StationAddress || '').replace(/^\d+/, '').slice(0, 3)) })).filter(s => s.id && s.name);
   });
 }
 
@@ -240,16 +254,20 @@ const shortType = type => String(type).replace(/\(.*?\)|（.*?）/g, '').replace
 function show(id) { ['view', 'setup'].forEach(s => $(s).classList.toggle('hidden', s !== id)); window.scrollTo(0, 0); }
 function setStatus(msg, err) { const el = $('status'); el.textContent = msg || ''; el.classList.toggle('err', !!err); }
 
-function routeNames() {
-  const xf = XFER.find(x => x[0] === cfg.xferThsr) || [];
-  return { home: cfg.homeName, traX: xf[1] || cfg.xferTraName, thX: cfg.xferThsr, dest: (THSR.find(s => s[0] === cfg.destId) || [])[1] };
+const thName = id => (THSR.find(s => s[0] === id) || [, id])[1];
+// 目前方向的路線：{traFrom, traTo, thFrom, thTo}
+function leg(dir) {
+  const g = cfg.go;
+  if (dir === 'go') return g;
+  if (cfg.sameBack) return { thFrom: g.thTo, thTo: g.thFrom, traFrom: g.traTo, traTo: g.traFrom };
+  return cfg.back;
 }
 
 function renderTop() {
-  const n = routeNames();
-  $('routeTxt').innerHTML = state.dir === 'go'
-    ? `<b>${esc(n.home)}</b> <span>區間→</span> <b>${esc(n.traX)}</b><br><span>高鐵</span> ${esc(n.thX)} <span>→</span> <b>${esc(n.dest)}</b>`
-    : `<span>高鐵</span> <b>${esc(n.dest)}</b> <span>→</span> ${esc(n.thX)}<br><b>${esc(n.traX)}</b> <span>區間→</span> <b>${esc(n.home)}</b>`;
+  const L = leg(state.dir);
+  const tra = `<b>${esc(L.traFrom.name)}</b> <span>區間→</span> <b>${esc(L.traTo.name)}</b>`;
+  const th = `<span>高鐵</span> <b>${esc(thName(L.thFrom))}</b> <span>→</span> <b>${esc(thName(L.thTo))}</b>`;
+  $('routeTxt').innerHTML = state.dir === 'go' ? tra + '<br>' + th : th + '<br>' + tra;
   [...$('dirSeg').children].forEach(b => b.classList.toggle('on', b.dataset.dir === state.dir));
   [...$('daySeg').children].forEach(b => b.classList.toggle('on', +b.dataset.day === state.day));
 }
@@ -263,14 +281,9 @@ async function load() {
   setStatus('查詢中…');
   const d = new Date(); d.setDate(d.getDate() + state.day);
   const date = fmt(d);
-  const thX = (THSR.find(s => s[1] === cfg.xferThsr) || [])[0];
+  const L = leg(state.dir);
   try {
-    let th, tr;
-    if (state.dir === 'go') {
-      [th, tr] = await Promise.all([thsrOD(thX, cfg.destId, date), traOD(cfg.homeId, cfg.xferTraId, date)]);
-    } else {
-      [th, tr] = await Promise.all([thsrOD(cfg.destId, thX, date), traOD(cfg.xferTraId, cfg.homeId, date)]);
-    }
+    let [th, tr] = await Promise.all([thsrOD(L.thFrom, L.thTo, date), traOD(L.traFrom.id, L.traTo.id, date)]);
     if (my !== seq) return;
     if (cfg.localOnly) tr = tr.filter(t => isLocal(t.type));
     render(th, tr);
@@ -285,7 +298,7 @@ function render(th, tr) {
   const nowMin = state.day === 0 ? now.getHours() * 60 + now.getMinutes() : -1;
   const buf = +cfg.buf || 0;
   const go = state.dir === 'go';
-  const n = routeNames();
+  const L = leg(state.dir);
   // 去程：只列高鐵還沒開的；回程同樣
   let list = th;
   let hidden = 0;
@@ -324,8 +337,8 @@ function render(th, tr) {
     const past = nowMin >= 0 && dep < nowMin;
     return `<div class="card${past || allGone ? ' past' : ''}">`
       + `<div class="row"><span class="tag thsr">高鐵</span><span class="thsrline">${t.dep} → ${t.arr}</span></div>`
-      + `<div class="sub">${esc(go ? n.thX + ' → ' + n.dest : n.dest + ' → ' + n.thX)}・${esc(t.no || '')} 車次・${arr - dep} 分鐘</div>`
-      + `<div class="tras"><div class="row" style="margin-bottom:2px"><span class="tag tra">${go ? '先搭' : '再搭'}</span><span class="s" style="font-size:13px;color:var(--muted)">${esc(go ? n.home + ' → ' + n.traX : n.traX + ' → ' + n.home)}</span></div>${rows}</div>`
+      + `<div class="sub">${esc(thName(L.thFrom) + ' → ' + thName(L.thTo))}・${esc(t.no || '')} 車次・${arr - dep} 分鐘</div>`
+      + `<div class="tras"><div class="row" style="margin-bottom:2px"><span class="tag tra">${go ? '先搭' : '再搭'}</span><span class="s" style="font-size:13px;color:var(--muted)">${esc(L.traFrom.name + ' → ' + L.traTo.name)}</span></div>${rows}</div>`
       + `</div>`;
   }).join('');
   $('list').innerHTML = html || '<div class="card">今天已經趕不上剩下的高鐵班次了，可以看「明天」。</div>';
@@ -333,34 +346,75 @@ function render(th, tr) {
 }
 
 // ---------- 設定 ----------
+const PICK = ['gTraFrom', 'gTraTo', 'bTraFrom', 'bTraTo'];
+const THSEL = ['gThFrom', 'gThTo', 'bThFrom', 'bThTo'];
+// 縣市由北到南排
+const CITY_ORDER = ['基隆市','台北市','新北市','桃園市','新竹市','新竹縣','苗栗縣','台中市','彰化縣','南投縣','雲林縣','嘉義市','嘉義縣','台南市','高雄市','屏東縣','宜蘭縣','花蓮縣','台東縣'];
+const cityRank = c => { const i = CITY_ORDER.indexOf(c); return i < 0 ? 99 : i; };
+const cityOf = s => s.city || '其他';
+function setPick(p, id) {
+  const stn = traSt.find(s => s.id === id);
+  $(p + 'C').value = stn ? cityOf(stn) : '';
+  fillStations(p, id);
+}
+function fillStations(p, id) {
+  const c = $(p + 'C').value;
+  const list = traSt.filter(s => cityOf(s) === c);
+  $(p + 'S').innerHTML = '<option value="">' + (c ? '選車站' : '先選縣市') + '</option>'
+    + list.map(s => `<option value="${esc(s.id)}">${esc(norm(s.name))}</option>`).join('');
+  $(p + 'S').value = id && list.some(s => s.id === id) ? id : '';
+}
+function getPick(p) { const s = traSt.find(x => x.id === $(p + 'S').value); return s ? { id: s.id, name: norm(s.name) } : null; }
+// 選了高鐵站，自動帶入對應的台鐵轉乘站
+function autoPair(thSel, pick) {
+  const x = XFER.find(x => x[0] === thName($(thSel).value));
+  const stn = x && traSt.find(s => norm(s.name) === norm(x[1]));
+  if (stn) setPick(pick, stn.id);
+}
+PICK.forEach(p => { $(p + 'C').onchange = () => fillStations(p, ''); });
+THSEL.forEach(id => { $(id).innerHTML = THSR.map(([v, n]) => `<option value="${v}">${n}</option>`).join(''); });
+$('gThFrom').onchange = () => autoPair('gThFrom', 'gTraTo');
+$('bThTo').onchange = () => autoPair('bThTo', 'bTraFrom');
+$('sSame').onchange = () => {
+  const same = $('sSame').checked;
+  $('backBox').classList.toggle('hidden', same);
+  if (same || !traSt.length) return;
+  // 改成分開設定時，先用去程反過來當起點
+  $('bThFrom').value = $('gThTo').value; $('bThTo').value = $('gThFrom').value;
+  setPick('bTraFrom', $('gTraToS').value); setPick('bTraTo', $('gTraFromS').value);
+};
+
 let traSt = [];
 async function openSetup(first) {
   show('setup');
   $('btnCancel').classList.toggle('hidden', !!first);
-  $('sXfer').innerHTML = XFER.map(([t, r]) => `<option value="${t}">高鐵${t}（台鐵${r.replace('臺', '台')}站）</option>`).join('');
-  $('sDest').innerHTML = THSR.map(([id, n]) => `<option value="${id}">${n}</option>`).join('');
-  const c = cfg || { xferThsr: '台中', destId: '1000', buf: 10, localOnly: true };
-  $('sHome').value = c.homeName || '';
-  $('sXfer').value = c.xferThsr;
-  $('sDest').value = c.destId;
+  const c = cfg || { go: { thFrom: '1040', thTo: '1000' }, sameBack: true, buf: 10, localOnly: true };
+  const g = c.go, b = c.back || {};
+  $('gThFrom').value = g.thFrom; $('gThTo').value = g.thTo;
+  $('bThFrom').value = b.thFrom || g.thTo; $('bThTo').value = b.thTo || g.thFrom;
+  $('sSame').checked = c.sameBack !== false;
+  $('backBox').classList.toggle('hidden', $('sSame').checked);
   $('sBuf').value = c.buf;
   $('sLocal').checked = !!c.localOnly;
   $('sCid').value = c.cid || '';
   $('sSec').value = c.sec || '';
   const st = $('setStatus');
   st.classList.remove('err');
+  PICK.forEach(p => { $(p + 'C').innerHTML = '<option>讀取中…</option>'; $(p + 'S').innerHTML = ''; });
   if (!traSt.length) {
     st.textContent = '讀取台鐵車站…';
-    try {
-      traSt = await traStations();
-      $('traList').innerHTML = traSt.map(s => `<option value="${esc(s.name)}">`).join('');
-      st.textContent = '';
-    } catch (e) {
-      st.textContent = e.message; st.classList.add('err');
-    }
+    try { traSt = await traStations(); st.textContent = ''; }
+    catch (e) { st.textContent = e.message; st.classList.add('err'); return; }
   }
+  const cities = [...new Set(traSt.map(cityOf))].sort((a, b) => cityRank(a) - cityRank(b) || a.localeCompare(b));
+  const opts = '<option value="">選縣市</option>' + cities.map(x => `<option>${esc(x)}</option>`).join('');
+  PICK.forEach(p => { $(p + 'C').innerHTML = opts; });
+  const id = o => o && o.id;
+  setPick('gTraFrom', id(g.traFrom));
+  setPick('bTraTo', id(b.traTo) || id(g.traFrom));
+  if (g.traTo) setPick('gTraTo', g.traTo.id); else autoPair('gThFrom', 'gTraTo');
+  if (b.traFrom) setPick('bTraFrom', b.traFrom.id); else setPick('bTraFrom', id(g.traTo) || $('gTraToS').value);
 }
-const findTra = name => traSt.find(s => norm(s.name) === norm(name));
 
 $('btnSave').onclick = async () => {
   const st = $('setStatus'); st.classList.add('err');
@@ -368,25 +422,20 @@ $('btnSave').onclick = async () => {
   if (c.cid && !c.sec || !c.cid && c.sec) { st.textContent = 'Client Id 和 Secret 要一起填'; $('keyBox').open = true; return; }
   const keyChanged = !cfg || cfg.cid !== c.cid || cfg.sec !== c.sec;
   if (keyChanged) { del('tok'); cfg = Object.assign({}, cfg, c); }
-  if (!traSt.length) {
-    st.textContent = '讀取台鐵車站…'; st.classList.remove('err');
-    try { traSt = await traStations(); } catch (e) { st.textContent = e.message; st.classList.add('err'); return; }
-    st.classList.add('err');
-  }
-  const home = findTra($('sHome').value);
-  if (!home) { st.textContent = '找不到「' + $('sHome').value + '」這個台鐵站，請從清單選'; return; }
-  const xferThsr = $('sXfer').value;
-  const xTra = findTra(XFER.find(x => x[0] === xferThsr)[1]);
-  if (!xTra) { st.textContent = '找不到轉乘的台鐵站'; return; }
-  const destId = $('sDest').value;
-  if ((THSR.find(s => s[1] === xferThsr) || [])[0] === destId) { st.textContent = '高鐵起訖站不能一樣'; return; }
-  if (home.id === xTra.id) { st.textContent = '搭車站和轉乘站不能一樣'; return; }
-  cfg = Object.assign(c, {
-    homeId: home.id, homeName: norm(home.name),
-    xferThsr, xferTraId: xTra.id, xferTraName: norm(xTra.name),
-    destId, buf: Math.max(0, Math.min(60, parseInt($('sBuf').value, 10) || 0)),
-    localOnly: $('sLocal').checked
-  });
+  if (!traSt.length) { await openSetup(!cfg || !cfg.go); return; }
+  const go = { traFrom: getPick('gTraFrom'), traTo: getPick('gTraTo'), thFrom: $('gThFrom').value, thTo: $('gThTo').value };
+  const sameBack = $('sSame').checked;
+  const back = { thFrom: $('bThFrom').value, thTo: $('bThTo').value, traFrom: getPick('bTraFrom'), traTo: getPick('bTraTo') };
+  const check = (L, name) => {
+    if (!L.traFrom || !L.traTo) return name + '的台鐵上、下車站要選好';
+    if (L.traFrom.id === L.traTo.id) return name + '的台鐵上、下車站不能一樣';
+    if (L.thFrom === L.thTo) return name + '的高鐵起訖站不能一樣';
+    return '';
+  };
+  const err = check(go, '去程') || (sameBack ? '' : check(back, '回程'));
+  if (err) { st.textContent = err; return; }
+  cfg = Object.assign(c, { v: 2, go, back: sameBack ? null : back, sameBack,
+    buf: Math.max(0, Math.min(60, parseInt($('sBuf').value, 10) || 0)), localOnly: $('sLocal').checked });
   put('cfg', cfg);
   st.textContent = '';
   show('view'); load();
@@ -397,17 +446,24 @@ $('dirSeg').onclick = e => { const b = e.target.closest('button'); if (!b) retur
 $('daySeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.day = +b.dataset.day; state.showEarlier = false; load(); };
 $('btnEarlier').onclick = () => { state.showEarlier = true; load(); };
 // 回到 App 時更新（已開走的班次變灰）
-document.addEventListener('visibilitychange', () => { if (!document.hidden && cfg && !$('view').classList.contains('hidden')) load(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && cfg && cfg.go && !$('view').classList.contains('hidden')) load(); });
 
 // ---------- 測試用假資料（網址加 ?demo） ----------
-const DEMO_TRA = ['豐原', '潭子', '台中', '大慶', '新烏日', '烏日', '彰化', '臺北', '南港', '板橋', '六家', '豐富', '沙崙', '新左營'];
+const DEMO_TRA = [['豐原', '臺中市'], ['潭子', '臺中市'], ['臺中', '臺中市'], ['大慶', '臺中市'], ['新烏日', '臺中市'], ['烏日', '臺中市'], ['彰化', '彰化縣'], ['員林', '彰化縣'], ['臺北', '臺北市'], ['南港', '臺北市'], ['板橋', '新北市'], ['六家', '新竹縣'], ['豐富', '苗栗縣'], ['沙崙', '臺南市'], ['新左營', '高雄市'], ['基隆', '基隆市']];
 function demoThsr() { const a = []; for (let m = 6 * 60 + 15; m < 23 * 60; m += 30 + (m % 7)) a.push({ no: String(600 + a.length * 2), dep: hm(m), arr: hm(m + 48 + (a.length % 3) * 10) }); return a; }
 function demoTra() { const a = []; for (let m = 5 * 60 + 40; m < 23 * 60 + 30; m += 13 + (m % 11)) a.push({ no: String(2100 + a.length * 2), type: a.length % 5 === 3 ? '自強(3000)' : (a.length % 4 === 1 ? '區間快' : '區間'), dep: hm(m), arr: hm(m + 22) }); return a; }
 function hm(m) { return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
 
 // ---------- 開始 ----------
 purgeCache();
-if (cfg && cfg.homeId) { show('view'); load(); }
+// 舊版設定（單一路線）轉成去程，回程反過來
+if (cfg && !cfg.go && cfg.homeId) {
+  const thId = (THSR.find(x => x[1] === cfg.xferThsr) || [])[0];
+  cfg = { v: 2, cid: cfg.cid, sec: cfg.sec, buf: cfg.buf, localOnly: cfg.localOnly, sameBack: true, back: null,
+    go: { traFrom: { id: cfg.homeId, name: cfg.homeName }, traTo: { id: cfg.xferTraId, name: cfg.xferTraName }, thFrom: thId, thTo: cfg.destId } };
+  put('cfg', cfg);
+}
+if (cfg && cfg.go) { show('view'); load(); }
 else openSetup(true);
 })();
 </script>
