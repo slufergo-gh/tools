@@ -45,7 +45,14 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
 .tr .w{margin-left:auto;font-size:13px;color:var(--muted);white-space:nowrap}
 .tr.gone{opacity:.4;text-decoration:line-through}
 .tr.none{color:var(--muted);font-size:15px}
-.more{display:block;width:100%;margin-top:14px;padding:12px;color:var(--muted)}
+.q{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-top:10px}
+.q input{min-width:0;width:100%;padding:10px 6px;font-size:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.q button{padding:10px 18px;font-size:17px;background:var(--accent);border-color:var(--accent);color:#fff}
+.throw{display:block;width:100%;text-align:left;padding:0;background:none;border:0;border-radius:0}
+.throw .chev{margin-left:auto;color:var(--muted);font-size:14px;white-space:nowrap}
+.tras.up{margin:0 0 10px;padding:0 0 8px;border-top:0;border-bottom:1px dashed var(--line)}
+.addmore{display:block;width:100%;margin-top:6px;padding:10px;font-size:15px;color:var(--muted)}
+.more{display:block;width:100%;margin-top:12px;padding:12px;color:var(--muted)}
 /* 設定 */
 .set h1{font-size:22px;margin:6px 0 4px}
 .set p.hint{font-size:14px;color:var(--muted);line-height:1.6;margin:4px 0 14px}
@@ -78,14 +85,15 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
       <button data-dir="go">去程</button>
       <button data-dir="back">回程</button>
     </div>
-    <div class="seg small" id="daySeg">
-      <button data-day="0">今天</button>
-      <button data-day="1">明天</button>
+    <div class="q">
+      <input type="date" id="qDate" aria-label="日期">
+      <input type="time" id="qTime" aria-label="高鐵出發時間">
+      <button id="btnQuery">查詢</button>
     </div>
     <div class="status" id="status"></div>
   </div>
+  <button class="more hidden" id="btnEarlier">更早的高鐵</button>
   <div id="list"></div>
-  <button class="more hidden" id="btnEarlier">顯示已經趕不上的班次</button>
 </section>
 
 <!-- 設定畫面 -->
@@ -158,7 +166,7 @@ const fmt = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let cfg = get('cfg', null);
-let state = { dir: get('dir', 'go'), day: 0, showEarlier: false };
+let state = { dir: get('dir', 'go'), th: null, tr: null, open: {}, nowMin: -1, from: 0 };
 
 // ---------- TDX ----------
 async function token() {
@@ -269,81 +277,94 @@ function renderTop() {
   const th = `<span>高鐵</span> <b>${esc(thName(L.thFrom))}</b> <span>→</span> <b>${esc(thName(L.thTo))}</b>`;
   $('routeTxt').innerHTML = state.dir === 'go' ? tra + '<br>' + th : th + '<br>' + tra;
   [...$('dirSeg').children].forEach(b => b.classList.toggle('on', b.dataset.dir === state.dir));
-  [...$('daySeg').children].forEach(b => b.classList.toggle('on', +b.dataset.day === state.day));
 }
 
 let seq = 0;
+const nowHM = () => { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); };
+function resetQuery() { $('qDate').value = fmt(new Date()); $('qTime').value = nowHM(); }
+function clearResult(msg) {
+  seq++; state.th = state.tr = null;
+  $('list').innerHTML = ''; $('btnEarlier').classList.add('hidden');
+  setStatus(msg || '選好日期和高鐵出發時間，按「查詢」');
+}
 async function load() {
   renderTop();
   const my = ++seq;
   $('list').innerHTML = '';
   $('btnEarlier').classList.add('hidden');
   setStatus('查詢中…');
-  const d = new Date(); d.setDate(d.getDate() + state.day);
-  const date = fmt(d);
+  const date = $('qDate').value || fmt(new Date());
   const L = leg(state.dir);
   try {
     let [th, tr] = await Promise.all([thsrOD(L.thFrom, L.thTo, date), traOD(L.traFrom.id, L.traTo.id, date)]);
     if (my !== seq) return;
     if (cfg.localOnly) tr = tr.filter(t => isLocal(t.type));
-    render(th, tr);
+    state.th = th; state.tr = tr; state.open = {};
+    state.nowMin = date === fmt(new Date()) ? toMin(nowHM()) : -1;
+    state.from = toMin($('qTime').value || '00:00');
+    state.autoOpen = true;
+    render();
   } catch (e) {
     if (my !== seq) return;
     setStatus(e.message || String(e), true);
   }
 }
 
-function render(th, tr) {
-  const now = new Date();
-  const nowMin = state.day === 0 ? now.getHours() * 60 + now.getMinutes() : -1;
+// 某班高鐵對應的台鐵：去程取抵達夠早的最後 n 班（由晚到早），回程取之後的前 n 班
+function traFor(t, n) {
+  const buf = +cfg.buf || 0, tr = state.tr;
+  if (state.dir === 'go') {
+    const ok = tr.filter(r => toMin(r.arr) <= toMin(t.dep) - buf);
+    return { list: ok.slice(-n).reverse(), more: ok.length > n };
+  }
+  const ok = tr.filter(r => toMin(r.dep) >= toMin(t.arr) + buf);
+  return { list: ok.slice(0, n), more: ok.length > n };
+}
+
+function render() {
+  const th = state.th, nowMin = state.nowMin;
   const buf = +cfg.buf || 0;
   const go = state.dir === 'go';
   const L = leg(state.dir);
-  // 去程：只列高鐵還沒開的；回程同樣
-  let list = th;
-  let hidden = 0;
-  if (!state.showEarlier && nowMin >= 0) {
-    const keep = th.filter(t => {
-      if (toMin(t.dep) < nowMin) return false;
-      if (!go) return true;
-      // 去程：至少還有一班來得及的區間車沒開走
-      return tr.some(r => toMin(r.arr) <= toMin(t.dep) - buf && toMin(r.dep) >= nowMin);
-    });
-    hidden = th.length - keep.length;
-    list = keep;
-  }
   if (!th.length) { setStatus('這天查不到高鐵班次'); return; }
-  setStatus(`轉乘預留 ${buf} 分鐘` + (cfg.localOnly ? '・只看區間車' : '') + `・資料：TDX`);
-  const html = list.map(t => {
+  const list = th.filter(t => toMin(t.dep) >= state.from);
+  $('btnEarlier').classList.toggle('hidden', !(state.from > 0 && th.some(t => toMin(t.dep) < state.from)));
+  setStatus(`高鐵 ${list.length} 班・轉乘預留 ${buf} 分鐘` + (cfg.localOnly ? '・只看區間車' : ''));
+  if (state.autoOpen && list.length) { state.open[list[0].no + list[0].dep] = 2; state.autoOpen = false; }
+  const labels = go ? ['最晚', '前一班'] : ['最快', '下一班'];
+  $('list').innerHTML = list.map(t => {
+    const key = t.no + t.dep, n = state.open[key] || 0;
     const dep = toMin(t.dep), arr = toMin(t.arr);
-    let pick;
-    if (go) {
-      // 抵達轉乘站時間 ≤ 高鐵發車 − 預留，取最晚兩班
-      pick = tr.filter(r => toMin(r.arr) <= dep - buf).slice(-2).reverse();
-    } else {
-      // 高鐵到站 + 預留 ≤ 區間車發車，取最早兩班
-      pick = tr.filter(r => toMin(r.dep) >= arr + buf).slice(0, 2);
-    }
-    const labels = go ? ['最晚', '前一班'] : ['最快', '下一班'];
-    const rows = pick.length ? pick.map((r, i) => {
-      const gone = nowMin >= 0 && toMin(r.dep) < nowMin;
-      const wait = go ? dep - toMin(r.arr) : toMin(r.dep) - arr;
-      return `<div class="tr${gone ? ' gone' : ''}"><span class="lbl">${labels[i]}</span>`
-        + `<span class="t">${r.dep}</span><span class="s">→</span><span class="t">${r.arr}</span>`
-        + `<span class="s">${esc(shortType(r.type))} ${esc(r.no || '')}</span>`
-        + `<span class="w">等 ${wait} 分</span></div>`;
-    }).join('') : `<div class="tr none">${go ? '沒有來得及的區間車' : '之後沒有區間車了'}</div>`;
-    const allGone = go && pick.length && pick.every(r => nowMin >= 0 && toMin(r.dep) < nowMin);
     const past = nowMin >= 0 && dep < nowMin;
-    return `<div class="card${past || allGone ? ' past' : ''}">`
-      + `<div class="row"><span class="tag thsr">高鐵</span><span class="thsrline">${t.dep} → ${t.arr}</span></div>`
-      + `<div class="sub">${esc(thName(L.thFrom) + ' → ' + thName(L.thTo))}・${esc(t.no || '')} 車次・${arr - dep} 分鐘</div>`
-      + `<div class="tras"><div class="row" style="margin-bottom:2px"><span class="tag tra">${go ? '先搭' : '再搭'}</span><span class="s" style="font-size:13px;color:var(--muted)">${esc(L.traFrom.name + ' → ' + L.traTo.name)}</span></div>${rows}</div>`
-      + `</div>`;
-  }).join('');
-  $('list').innerHTML = html || '<div class="card">今天已經趕不上剩下的高鐵班次了，可以看「明天」。</div>';
-  $('btnEarlier').classList.toggle('hidden', !hidden);
+    let body = '';
+    if (n) {
+      const { list: pick, more } = traFor(t, n);
+      let rows = pick.map((r, i) => {
+        const gone = nowMin >= 0 && toMin(r.dep) < nowMin;
+        const wait = go ? dep - toMin(r.arr) : toMin(r.dep) - arr;
+        return `<div class="tr${gone ? ' gone' : ''}"><span class="lbl">${labels[i] || (go ? '前' : '後') + i + '班'}</span>`
+          + `<span class="t">${r.dep}</span><span class="s">→</span><span class="t">${r.arr}</span>`
+          + `<span class="s">${esc(shortType(r.type))} ${esc(r.no || '')}</span>`
+          + `<span class="w">等 ${wait} 分</span></div>`;
+      });
+      // 去程照搭車順序：早的在上，最晚那班緊接著高鐵
+      if (go) rows.reverse();
+      rows = rows.length ? rows.join('') : `<div class="tr none">${go ? '沒有來得及的區間車' : '之後沒有區間車了'}</div>`;
+      const head = `<div class="row" style="margin-bottom:2px"><span class="tag tra">${go ? '先搭' : '再搭'}</span><span class="s" style="font-size:13px;color:var(--muted)">${esc(L.traFrom.name + ' → ' + L.traTo.name)}</span></div>`;
+      const btn = more ? `<button class="addmore" data-more="${esc(key)}">${go ? '▲ 再顯示前兩班' : '▼ 再顯示後兩班'}</button>` : '';
+      body = go ? `<div class="tras up">${head}${btn}${rows}</div>` : `<div class="tras">${head}${rows}${btn}</div>`;
+    }
+    const thBtn = `<button class="throw" data-key="${esc(key)}"><div class="row"><span class="tag thsr">${go && n ? '再轉' : '高鐵'}</span><span class="thsrline">${t.dep} → ${t.arr}</span><span class="chev">${n ? '收起' : '看台鐵'}</span></div>`
+      + `<div class="sub">高鐵 ${esc(thName(L.thFrom) + ' → ' + thName(L.thTo))}・${esc(t.no || '')} 車次・${arr - dep} 分鐘</div></button>`;
+    return `<div class="card${past ? ' past' : ''}">` + (go ? body + thBtn : thBtn + body) + `</div>`;
+  }).join('') || '<div class="card">這個時間之後沒有高鐵了，可以把時間調早或換日期。</div>';
 }
+$('list').onclick = e => {
+  const m = e.target.closest('[data-more]');
+  if (m) { state.open[m.dataset.more] += 2; render(); return; }
+  const r = e.target.closest('[data-key]');
+  if (r) { const k = r.dataset.key; if (state.open[k]) delete state.open[k]; else state.open[k] = 2; render(); }
+};
 
 // ---------- 設定 ----------
 const PICK = ['gTraFrom', 'gTraTo', 'bTraFrom', 'bTraTo'];
@@ -438,15 +459,24 @@ $('btnSave').onclick = async () => {
     buf: Math.max(0, Math.min(60, parseInt($('sBuf').value, 10) || 0)), localOnly: $('sLocal').checked });
   put('cfg', cfg);
   st.textContent = '';
-  show('view'); load();
+  show('view'); clearResult();
 };
 $('btnCancel').onclick = () => { show('view'); };
 $('btnSet').onclick = () => openSetup(false);
-$('dirSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.dir = b.dataset.dir; put('dir', state.dir); state.showEarlier = false; load(); };
-$('daySeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.day = +b.dataset.day; state.showEarlier = false; load(); };
-$('btnEarlier').onclick = () => { state.showEarlier = true; load(); };
+$('dirSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.dir = b.dataset.dir; put('dir', state.dir); renderTop(); if (state.th) load(); else clearResult(); };
+$('btnQuery').onclick = () => load();
+// 往前一小時
+$('btnEarlier').onclick = () => {
+  state.from = Math.max(0, state.from - 60);
+  $('qTime').value = String(Math.floor(state.from / 60)).padStart(2, '0') + ':' + String(state.from % 60).padStart(2, '0');
+  render();
+};
 // 回到 App 時更新（已開走的班次變灰）
-document.addEventListener('visibilitychange', () => { if (!document.hidden && cfg && cfg.go && !$('view').classList.contains('hidden')) load(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !cfg || !cfg.go || $('view').classList.contains('hidden')) return;
+  // 隔了一段時間回來：沒查過就把時間更新成現在
+  if (!state.th) resetQuery();
+});
 
 // ---------- 測試用假資料（網址加 ?demo） ----------
 const DEMO_TRA = [['豐原', '臺中市'], ['潭子', '臺中市'], ['臺中', '臺中市'], ['大慶', '臺中市'], ['新烏日', '臺中市'], ['烏日', '臺中市'], ['彰化', '彰化縣'], ['員林', '彰化縣'], ['臺北', '臺北市'], ['南港', '臺北市'], ['板橋', '新北市'], ['六家', '新竹縣'], ['豐富', '苗栗縣'], ['沙崙', '臺南市'], ['新左營', '高雄市'], ['基隆', '基隆市']];
@@ -463,7 +493,8 @@ if (cfg && !cfg.go && cfg.homeId) {
     go: { traFrom: { id: cfg.homeId, name: cfg.homeName }, traTo: { id: cfg.xferTraId, name: cfg.xferTraName }, thFrom: thId, thTo: cfg.destId } };
   put('cfg', cfg);
 }
-if (cfg && cfg.go) { show('view'); load(); }
+resetQuery();
+if (cfg && cfg.go) { show('view'); renderTop(); clearResult(); }
 else openSetup(true);
 })();
 </script>
