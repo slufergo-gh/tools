@@ -45,9 +45,13 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
 .tr .w{margin-left:auto;font-size:13px;color:var(--muted);white-space:nowrap}
 .tr.gone{opacity:.4;text-decoration:line-through}
 .tr.none{color:var(--muted);font-size:15px}
-.q{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-top:10px}
-.q input{min-width:0;width:100%;padding:10px 6px;font-size:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
-.q button{padding:10px 18px;font-size:17px;background:var(--accent);border-color:var(--accent);color:#fff}
+.q{display:grid;grid-template-columns:1.5fr 1fr auto 1fr;gap:6px;margin-top:10px;align-items:center}
+.q input,.q select{min-width:0;width:100%;padding:10px 6px;font-size:17px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.q select{text-align:center;text-align-last:center;font-weight:600;font-variant-numeric:tabular-nums}
+.q .colon{font-size:20px;font-weight:700;color:var(--muted)}
+.q2{display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:6px;margin-top:6px}
+.q2 button{padding:10px 4px;font-size:16px}
+.q2 button.go{background:var(--accent);border-color:var(--accent);color:#fff;font-size:17px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
 .chips .lab{font-size:13px;color:var(--muted);margin-right:2px}
 .chips button{padding:8px 14px;font-size:17px;font-weight:600;font-variant-numeric:tabular-nums;border-radius:20px}
@@ -93,8 +97,14 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
     </div>
     <div class="q">
       <input type="date" id="qDate" aria-label="日期">
-      <input type="time" id="qTime" aria-label="高鐵出發時間">
-      <button id="btnQuery">查詢</button>
+      <select id="qH" aria-label="時"></select><span class="colon">:</span><select id="qM" aria-label="分"></select>
+      <input type="hidden" id="qTime">
+    </div>
+    <div class="q2" id="qQuick">
+      <button data-q="now">現在</button>
+      <button data-q="00">整點</button>
+      <button data-q="30">半點</button>
+      <button id="btnQuery" class="go">查詢</button>
     </div>
     <div class="chips" id="chips"></div>
     <div class="status" id="status"></div>
@@ -314,14 +324,40 @@ $('chips').onclick = e => {
   if (b.dataset.act === 'done') { editChips = false; renderChips(); return; }
   const t = b.dataset.t; if (!t) return;
   if (editChips) { saveTimes(getTimes().filter(x => x !== t)); renderChips(); return; }
-  $('qTime').value = t;
+  setTime(t);
   if (!$('qDate').value) $('qDate').value = fmt(new Date());
   load();
 };
 
 let seq = 0;
 const nowHM = () => { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); };
-function resetQuery() { $('qDate').value = fmt(new Date()); $('qTime').value = nowHM(); }
+const p2 = n => String(n).padStart(2, '0');
+$('qH').innerHTML = Array.from({ length: 24 }, (_, h) => `<option value="${p2(h)}">${p2(h)}</option>`).join('');
+$('qM').innerHTML = Array.from({ length: 12 }, (_, i) => `<option value="${p2(i * 5)}">${p2(i * 5)}</option>`).join('');
+// 時間以 5 分鐘為單位（往前取整，剛好要開的班次也會列到）
+function setTime(t) {
+  let m = Math.max(0, Math.min(toMin(t || '00:00'), 23 * 60 + 55));
+  m -= m % 5;
+  $('qH').value = p2(Math.floor(m / 60)); $('qM').value = p2(m % 60);
+  $('qTime').value = p2(Math.floor(m / 60)) + ':' + p2(m % 60);
+}
+const syncTime = () => { $('qTime').value = $('qH').value + ':' + $('qM').value; };
+$('qH').onchange = syncTime; $('qM').onchange = syncTime;
+$('qQuick').onclick = e => {
+  const b = e.target.closest('[data-q]'); if (!b) return;
+  const q = b.dataset.q;
+  if (q === 'now') { $('qDate').value = fmt(new Date()); setTime(nowHM()); }
+  else {
+    // 按「整點／半點」：往後跳到下一個 :00／:30（再按一次就再往後一小時）
+    const cur = toMin($('qTime').value || '00:00');
+    let t = +$('qH').value * 60 + +q;
+    if (t <= cur) t += 60;
+    t = Math.min(t, 23 * 60 + +q);
+    setTime(p2(Math.floor(t / 60)) + ':' + q);
+  }
+  load();
+};
+function resetQuery() { $('qDate').value = fmt(new Date()); setTime(nowHM()); }
 function clearResult(msg) {
   seq++; state.th = state.tr = null;
   $('list').innerHTML = ''; $('btnEarlier').classList.add('hidden');
@@ -509,7 +545,7 @@ $('btnQuery').onclick = () => load();
 // 往前一小時
 $('btnEarlier').onclick = () => {
   state.from = Math.max(0, state.from - 60);
-  $('qTime').value = String(Math.floor(state.from / 60)).padStart(2, '0') + ':' + String(state.from % 60).padStart(2, '0');
+  setTime(p2(Math.floor(state.from / 60)) + ':' + p2(state.from % 60));
   render();
 };
 // 回到 App 時更新（已開走的班次變灰）
