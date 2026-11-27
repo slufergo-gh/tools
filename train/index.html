@@ -58,6 +58,14 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
 .chips button.on{background:#1d3350;border-color:var(--accent)}
 .chips button.x{color:var(--warn);border-color:var(--warn)}
 .chips button.tool{font-size:14px;font-weight:400;color:var(--muted);padding:8px 12px}
+.dl{font-size:14px;color:var(--warn);margin:-2px 0 4px 3.7em}
+.dl.ok{color:var(--muted)}
+.tr .live{font-size:12px;color:#6fcf97;margin-left:4px}
+#alerts details{margin-top:12px;background:#3a1f1f;border:1px solid #6b2b2b;border-radius:14px;padding:10px 14px}
+#alerts summary{font-size:16px;font-weight:600;color:#ffb4b4;cursor:pointer}
+#alerts .al{font-size:14px;line-height:1.6;margin-top:8px;padding-top:8px;border-top:1px solid #6b2b2b}
+#alerts .al b{display:block;color:var(--fg)}
+#alerts .note{font-size:13px;color:var(--muted);margin-top:10px}
 .throw{display:block;width:100%;text-align:left;padding:0;background:none;border:0;border-radius:0}
 .throw .chev{margin-left:auto;color:var(--muted);font-size:14px;white-space:nowrap}
 .tras.up{margin:0 0 10px;padding:0 0 8px;border-top:0;border-bottom:1px dashed var(--line)}
@@ -109,6 +117,7 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
     <div class="chips" id="chips"></div>
     <div class="status" id="status"></div>
   </div>
+  <div id="alerts"></div>
   <button class="more hidden" id="btnEarlier">更早的高鐵</button>
   <div id="list"></div>
 </section>
@@ -272,6 +281,63 @@ async function traOD(o, d, date) {
     }).filter(t => t.dep && t.arr).sort((a, b) => toMin(a.dep) - toMin(b.dep));
   });
 }
+// ---------- 即時資訊 ----------
+// 台鐵即時誤點：{車次: 晚幾分}（只在查今天時用，1 分鐘內重用）
+let delayCache = { t: 0, v: null };
+async function traDelays() {
+  if (DEMO) return { '2120': 6, '2122': 3, '2128': 12 };
+  if (delayCache.v && Date.now() - delayCache.t < 60e3) return delayCache.v;
+  let rows;
+  try {
+    const j = await tdx('/v3/Rail/TRA/TrainLiveBoard');
+    rows = Array.isArray(j) ? j : (j.TrainLiveBoards || []);
+  } catch (e) {
+    const j = await tdx('/v2/Rail/TRA/LiveTrainDelay');
+    rows = Array.isArray(j) ? j : (j.LiveTrainDelays || []);
+  }
+  const v = {};
+  rows.forEach(r => { if (r.TrainNo != null) v[String(r.TrainNo)] = +r.DelayTime || 0; });
+  delayCache = { t: Date.now(), v };
+  return v;
+}
+// 營運通報：只留不正常的 → [{src, title, desc}]
+async function alerts() {
+  if (DEMO) return [{ src: '台鐵', title: '縱貫線因設備故障部分列車延誤', desc: '豐原=潭子間設備故障，往南列車延誤約 10 至 20 分鐘，請旅客留意。' }];
+  return cached('alerts', 5 * 60e3, async () => {
+    const out = [];
+    const text = a => [a.Title, a.Description].filter(Boolean).join(' ');
+    const normal = a => /營運正常|正常營運|恢復正常/.test(text(a)) && !/延誤|停駛|中斷|暫停|停止/.test(text(a));
+    const [tra, th] = await Promise.allSettled([tdx('/v3/Rail/TRA/Alert'), tdx('/v2/Rail/THSR/AlertInfo')]);
+    if (tra.status === 'fulfilled') {
+      const arr = Array.isArray(tra.value) ? tra.value : (tra.value.Alerts || []);
+      arr.filter(a => a.Status !== 1 && a.Status !== '1' && !normal(a))
+        .forEach(a => out.push({ src: '台鐵', title: a.Title || '', desc: a.Description || '' }));
+    }
+    if (th.status === 'fulfilled') {
+      const arr = Array.isArray(th.value) ? th.value : (th.value.AlertInfos || th.value.Alerts || []);
+      arr.filter(a => (a.Title || a.Description) && !normal(a))
+        .forEach(a => out.push({ src: '高鐵', title: a.Title || '', desc: a.Description || '' }));
+    }
+    if (tra.status === 'rejected' && th.status === 'rejected') throw tra.reason;
+    return out;
+  });
+}
+function renderAlerts() {
+  const a = state.alerts;
+  if (!a || !a.length) { $('alerts').innerHTML = ''; return; }
+  const src = [...new Set(a.map(x => x.src))].join('、');
+  $('alerts').innerHTML = `<details><summary>⚠ ${esc(src)}有 ${a.length} 則營運通報</summary>`
+    + a.map(x => `<div class="al"><b>【${esc(x.src)}】${esc(x.title)}</b>${esc(x.desc)}</div>`).join('')
+    + `<div class="note">通報不一定跟你的路線有關，請看內容判斷。</div></details>`;
+}
+async function loadLive(my, today) {
+  const jobs = [alerts().then(v => { state.alerts = v; }).catch(() => { state.alerts = null; })];
+  if (today) jobs.push(traDelays().then(v => { state.delay = v; }).catch(() => { state.delay = null; state.liveErr = true; }));
+  await Promise.all(jobs);
+  if (my !== seq || !state.th) return;
+  renderAlerts(); render();
+}
+
 const isLocal = type => /區間/.test(type);
 const shortType = type => String(type).replace(/\(.*?\)|（.*?）/g, '').replace(/號$/, '').trim() || '台鐵';
 
@@ -361,6 +427,7 @@ function resetQuery() { $('qDate').value = fmt(new Date()); setTime(nowHM()); }
 function clearResult(msg) {
   seq++; state.th = state.tr = null;
   $('list').innerHTML = ''; $('btnEarlier').classList.add('hidden');
+  if (state.alerts) renderAlerts();
   setStatus(msg || '點常用時間，或選好日期和時間按「查詢」');
   if (cfg && cfg.go) renderChips();
 }
@@ -380,7 +447,9 @@ async function load() {
     state.nowMin = date === fmt(new Date()) ? toMin(nowHM()) : -1;
     state.from = toMin($('qTime').value || '00:00');
     state.autoOpen = true;
+    state.delay = null; state.liveErr = false;
     render(); renderChips();
+    loadLive(my, state.nowMin >= 0);
   } catch (e) {
     if (my !== seq) return;
     setStatus(e.message || String(e), true);
@@ -406,7 +475,8 @@ function render() {
   if (!th.length) { setStatus('這天查不到高鐵班次'); return; }
   const list = th.filter(t => toMin(t.dep) >= state.from);
   $('btnEarlier').classList.toggle('hidden', !(state.from > 0 && th.some(t => toMin(t.dep) < state.from)));
-  setStatus(`高鐵 ${list.length} 班・轉乘預留 ${buf} 分鐘` + (cfg.localOnly ? '・只看區間車' : ''));
+  setStatus(`高鐵 ${list.length} 班・轉乘預留 ${buf} 分鐘` + (cfg.localOnly ? '・只看區間車' : '')
+    + (state.delay ? '・含台鐵誤點' : (state.liveErr ? '・即時誤點讀取失敗' : '')));
   if (state.autoOpen && list.length) { state.open[list[0].no + list[0].dep] = 2; state.autoOpen = false; }
   const labels = go ? ['最晚', '前一班'] : ['最快', '下一班'];
   $('list').innerHTML = list.map(t => {
@@ -417,12 +487,19 @@ function render() {
     if (n) {
       const { list: pick, more } = traFor(t, n);
       let rows = pick.map((r, i) => {
-        const gone = nowMin >= 0 && toMin(r.dep) < nowMin;
-        const wait = go ? dep - toMin(r.arr) : toMin(r.dep) - arr;
+        const d = state.delay ? (state.delay[String(r.no)] || 0) : 0;
+        const gone = nowMin >= 0 && toMin(r.dep) + d < nowMin;
+        const wait = go ? dep - toMin(r.arr) - d : toMin(r.dep) + d - arr;
+        let dl = '';
+        if (d > 0 && !gone) {
+          const late = go ? `預計 ${hm(toMin(r.arr) + d)} 到，剩 ${wait} 分轉乘` : `預計 ${hm(toMin(r.dep) + d)} 開`;
+          dl = `<div class="dl">⚠ 晚 ${d} 分，${late}${go && wait < buf ? '，可能趕不上' : ''}</div>`;
+        }
+        const live = state.delay && !d && !gone && (r.no in state.delay) ? '<span class="live">準點</span>' : '';
         return `<div class="tr${gone ? ' gone' : ''}"><span class="lbl">${labels[i] || (go ? '前' : '後') + i + '班'}</span>`
           + `<span class="t">${r.dep}</span><span class="s">→</span><span class="t">${r.arr}</span>`
-          + `<span class="s">${esc(shortType(r.type))} ${esc(r.no || '')}</span>`
-          + `<span class="w">等 ${wait} 分</span></div>`;
+          + `<span class="s">${esc(shortType(r.type))} ${esc(r.no || '')}${live}</span>`
+          + `<span class="w">等 ${wait} 分</span></div>` + dl;
       });
       // 去程照搭車順序：早的在上，最晚那班緊接著高鐵
       if (go) rows.reverse();
