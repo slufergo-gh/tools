@@ -51,6 +51,7 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
 .set p.hint{font-size:14px;color:var(--muted);line-height:1.6;margin:4px 0 14px}
 .set label{display:block;font-size:14px;color:var(--muted);margin:16px 2px 6px}
 .set select,.set input[type=text],.set input[type=number],.set input[type=password]{width:100%;padding:12px;font-size:17px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.set .two{display:grid;grid-template-columns:1fr 1.3fr;gap:8px}
 .set .chk{display:flex;align-items:center;gap:10px;font-size:17px;color:var(--fg);margin-top:18px}
 .set .chk input{width:22px;height:22px;accent-color:var(--accent)}
 .set details{margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
@@ -90,9 +91,8 @@ main{max-width:560px;margin:0 auto;padding:12px 16px 40px}
   <h1>設定路線</h1>
   <p class="hint">設定一次就好，之後打開就直接顯示。去程是「區間車 → 高鐵」，回程會自動反過來。</p>
 
-  <label for="sHome">我搭區間車的車站（台鐵）</label>
-  <input type="text" id="sHome" list="traList" placeholder="例如：豐原" autocomplete="off">
-  <datalist id="traList"></datalist>
+  <label for="sCity">我搭區間車的車站（台鐵）</label>
+  <div class="two"><select id="sCity"></select><select id="sHome"></select></div>
 
   <label for="sXfer">轉乘的高鐵站</label>
   <select id="sXfer"></select>
@@ -195,11 +195,12 @@ function purgeCache() {
 }
 
 async function traStations() {
-  if (DEMO) return DEMO_TRA.map((n, i) => ({ id: String(1000 + i), name: n }));
-  return cached('traSt', 30 * 864e5, async () => {
+  if (DEMO) return DEMO_TRA.map(([n, c], i) => ({ id: String(1000 + i), name: n, city: norm(c) }));
+  return cached('traSt2', 30 * 864e5, async () => {
     const j = await tdx('/v3/Rail/TRA/Station');
     const arr = Array.isArray(j) ? j : (j.Stations || []);
-    return arr.map(s => ({ id: s.StationID, name: s.StationName && s.StationName.Zh_tw })).filter(s => s.id && s.name);
+    return arr.map(s => ({ id: s.StationID, name: s.StationName && s.StationName.Zh_tw,
+      city: norm(s.LocationCity || (s.StationAddress || '').replace(/^\d+/, '').slice(0, 3)) })).filter(s => s.id && s.name);
   });
 }
 
@@ -340,7 +341,6 @@ async function openSetup(first) {
   $('sXfer').innerHTML = XFER.map(([t, r]) => `<option value="${t}">高鐵${t}（台鐵${r.replace('臺', '台')}站）</option>`).join('');
   $('sDest').innerHTML = THSR.map(([id, n]) => `<option value="${id}">${n}</option>`).join('');
   const c = cfg || { xferThsr: '台中', destId: '1000', buf: 10, localOnly: true };
-  $('sHome').value = c.homeName || '';
   $('sXfer').value = c.xferThsr;
   $('sDest').value = c.destId;
   $('sBuf').value = c.buf;
@@ -349,17 +349,35 @@ async function openSetup(first) {
   $('sSec').value = c.sec || '';
   const st = $('setStatus');
   st.classList.remove('err');
+  $('sCity').innerHTML = '<option>讀取中…</option>'; $('sHome').innerHTML = '';
   if (!traSt.length) {
     st.textContent = '讀取台鐵車站…';
     try {
       traSt = await traStations();
-      $('traList').innerHTML = traSt.map(s => `<option value="${esc(s.name)}">`).join('');
       st.textContent = '';
     } catch (e) {
       st.textContent = e.message; st.classList.add('err');
     }
   }
+  if (traSt.length) fillCities(c.homeId);
 }
+// 縣市由北到南排
+const CITY_ORDER = ['基隆市','台北市','新北市','桃園市','新竹市','新竹縣','苗栗縣','台中市','彰化縣','南投縣','雲林縣','嘉義市','嘉義縣','台南市','高雄市','屏東縣','宜蘭縣','花蓮縣','台東縣'];
+const cityRank = c => { const i = CITY_ORDER.indexOf(c); return i < 0 ? 99 : i; };
+function fillCities(homeId) {
+  const cities = [...new Set(traSt.map(s => s.city || '其他'))].sort((a, b) => cityRank(a) - cityRank(b) || a.localeCompare(b));
+  const home = traSt.find(s => s.id === homeId);
+  $('sCity').innerHTML = '<option value="">選縣市</option>' + cities.map(c => `<option>${esc(c)}</option>`).join('');
+  $('sCity').value = home ? (home.city || '其他') : '';
+  fillStations(homeId);
+}
+function fillStations(homeId) {
+  const c = $('sCity').value;
+  const list = traSt.filter(s => (s.city || '其他') === c);
+  $('sHome').innerHTML = '<option value="">' + (c ? '選車站' : '先選縣市') + '</option>' + list.map(s => `<option value="${esc(s.id)}">${esc(norm(s.name))}</option>`).join('');
+  $('sHome').value = homeId && list.some(s => s.id === homeId) ? homeId : '';
+}
+$('sCity').onchange = () => fillStations('');
 const findTra = name => traSt.find(s => norm(s.name) === norm(name));
 
 $('btnSave').onclick = async () => {
@@ -371,10 +389,11 @@ $('btnSave').onclick = async () => {
   if (!traSt.length) {
     st.textContent = '讀取台鐵車站…'; st.classList.remove('err');
     try { traSt = await traStations(); } catch (e) { st.textContent = e.message; st.classList.add('err'); return; }
-    st.classList.add('err');
+    fillCities(cfg && cfg.homeId);
+    st.textContent = '車站讀好了，請選縣市和車站'; return;
   }
-  const home = findTra($('sHome').value);
-  if (!home) { st.textContent = '找不到「' + $('sHome').value + '」這個台鐵站，請從清單選'; return; }
+  const home = traSt.find(s => s.id === $('sHome').value);
+  if (!home) { st.textContent = '請先選縣市和車站'; return; }
   const xferThsr = $('sXfer').value;
   const xTra = findTra(XFER.find(x => x[0] === xferThsr)[1]);
   if (!xTra) { st.textContent = '找不到轉乘的台鐵站'; return; }
@@ -400,7 +419,7 @@ $('btnEarlier').onclick = () => { state.showEarlier = true; load(); };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && cfg && !$('view').classList.contains('hidden')) load(); });
 
 // ---------- 測試用假資料（網址加 ?demo） ----------
-const DEMO_TRA = ['豐原', '潭子', '台中', '大慶', '新烏日', '烏日', '彰化', '臺北', '南港', '板橋', '六家', '豐富', '沙崙', '新左營'];
+const DEMO_TRA = [['豐原', '臺中市'], ['潭子', '臺中市'], ['臺中', '臺中市'], ['大慶', '臺中市'], ['新烏日', '臺中市'], ['烏日', '臺中市'], ['彰化', '彰化縣'], ['員林', '彰化縣'], ['臺北', '臺北市'], ['南港', '臺北市'], ['板橋', '新北市'], ['六家', '新竹縣'], ['豐富', '苗栗縣'], ['沙崙', '臺南市'], ['新左營', '高雄市'], ['基隆', '基隆市']];
 function demoThsr() { const a = []; for (let m = 6 * 60 + 15; m < 23 * 60; m += 30 + (m % 7)) a.push({ no: String(600 + a.length * 2), dep: hm(m), arr: hm(m + 48 + (a.length % 3) * 10) }); return a; }
 function demoTra() { const a = []; for (let m = 5 * 60 + 40; m < 23 * 60 + 30; m += 13 + (m % 11)) a.push({ no: String(2100 + a.length * 2), type: a.length % 5 === 3 ? '自強(3000)' : (a.length % 4 === 1 ? '區間快' : '區間'), dep: hm(m), arr: hm(m + 22) }); return a; }
 function hm(m) { return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
